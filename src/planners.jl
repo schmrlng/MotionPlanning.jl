@@ -12,7 +12,7 @@ function fmtstar(P::ProblemSetup, N::Int, rm::Float64)
     W[1] = false
     H = falses(N)
     H[1] = true
-    C = zeros(N)
+    C = zeros(Float64,N)
     z = 1
 
     k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1)

@@ -39,7 +39,6 @@ export
     is_valid_state,
     is_free_state,
     sample_space,
-    volume,
     steer,
 
         ## Geometric State Spaces
