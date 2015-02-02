@@ -56,6 +56,18 @@ export
         nearestr,
         mutualnearestk,
 
+        ## Quasi Metric State Spaces
+        LinearQuadraticStateSpace,
+        QuasiMetricProblem,
+        QuasiMetricNN,
+        pairwise_distances,
+        pairwise_distances_approx_opt,
+        NNCache,
+        nearRF,
+        nearRB,
+        waypoints,
+        plot_solution,
+
     # Sampling
     sample_free_goal,
     sample_free,

@@ -57,7 +57,7 @@ function pairwise_distances_approx_opt{T}(V::Vector{Vector{T}}, SS::LinearQuadra
     N = length(V)
     V1 = hcat(V...)
     t = t_bound/2.
-    V0bar = SS.expAt(t)*V1 .+ cdrift(t)
+    V0bar = SS.expAt(t)*V1 .+ SS.cdrift(t)
     return (t + pairwise(SqMahalanobis(SS.Ginv(t)), V0bar, V1)), fill(t, N, N)
 end
 
