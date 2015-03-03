@@ -1,11 +1,11 @@
-using Graphs
+export fmtstar!
 
-function fmtstar(P::ProblemSetup, N::Int, rm::Float64)
+function fmtstar!(P::MPProblem, N::Int, rm::Float64)
     tic()
     collision_checks = 0
 
     V, free_volume_ub = sample_free(P, N)
-    NN = MetricNNKDTree(V, P.SS.dist)
+    NN = EuclideanNN_KDTree(V)
 
     A = zeros(Int,N)
     W = trues(N)
@@ -44,16 +44,17 @@ function fmtstar(P::ProblemSetup, N::Int, rm::Float64)
         unshift!(sol, A[sol[1]])
     end
 
+    P.status = is_goal_pt(V[z], P.goal) ? :solved : :failure
     solution_metadata = {
         "radius_multiplier" => rm,
         "collision_checks" => collision_checks,
-        "elapsed" => toq(),
         "num_samples" => N,
         "cost" => C[z],
-        "test_config" => P.config_name,
         "planner" => "FMTstar",
-        "solved" => is_goal_pt(V[z], P.goal)
+        "solved" => is_goal_pt(V[z], P.goal),
+        "tree" => A,
+        "path" => sol
     }
-
-    return solution_metadata, sol, V, A
+    P.solution = MPSolution(P.status, C[z], toq(), solution_metadata)
+    C[z]
 end

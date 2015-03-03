@@ -17,7 +17,7 @@ volume(obs::ObstacleSet) = volume_naive(obs)
 
 ### ObstacleList
 
-is_free_pt(v::Vector, obs_list::ObstacleList) = all([is_free_pt(v, obs) for obs in obs_list.list])
+is_free_state(v::Vector, obs_list::ObstacleList) = all([is_free_state(v, obs) for obs in obs_list.list])
 is_free_motion(v::Vector, w::Vector, obs_list::ObstacleList) = all([is_free_motion(v, w, obs) for obs in obs_list.list])
 is_free_path{T}(path::Vector{Vector{T}}, obs_list::ObstacleList) = all([is_free_path(path, obs) for obs in obs_list.list])
 closest_obs_pt(v::Vector, obs_list::ObstacleList) = mapreduce(obs -> closest_obs_pt(v, obs), (x,y) -> (x[1] < y[1] ? x : y), obs_list.list)
@@ -26,7 +26,7 @@ plot_obstacles(obs_list::ObstacleList) = [plot_obstacles(obs) for obs in obs_lis
 
 ### AABoxes
 
-is_free_pt(v::Vector, obs::AABoxes) = is_free_pt(v, obs.boxes)
+is_free_state(v::Vector, obs::AABoxes) = is_free_state(v, obs.boxes)
 is_free_motion(v::Vector, w::Vector, obs::AABoxes) = is_free_motion(v, w, obs.boxes)
 is_free_path{T}(path::Vector{Vector{T}}, obs::AABoxes) = is_free_path(path, obs.boxes)
 closest_obs_pt(v::Vector, obs::AABoxes) = closest_obs_pt(v, obs.boxes)
@@ -35,7 +35,7 @@ plot_obstacles(obs::AABoxes) = mapslices(o -> plot_rectangle(o, color = "red"), 
 
 ### Point/box obstacle checking in R^n
 
-function is_free_pt(v::Vector, o::AbstractMatrix)
+function is_free_state(v::Vector, o::AbstractMatrix)
     for i = 1:size(o,1)
         if !(o[i,1] <= v[i] <= o[i,2])
             return true
@@ -44,9 +44,9 @@ function is_free_pt(v::Vector, o::AbstractMatrix)
     return false
 end
 
-function is_free_pt(v::Vector, obs::Matrix3D)
+function is_free_state(v::Vector, obs::Matrix3D)
     for k = 1:size(obs,3)
-        !is_free_pt(v, view(obs,:,:,k)) && return false
+        !is_free_state(v, view(obs,:,:,k)) && return false
     end
     return true
 end
