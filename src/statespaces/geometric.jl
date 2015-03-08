@@ -1,57 +1,61 @@
 export RealVectorMetricSpace, BoundedEuclideanStateSpace, UnitHypercube
 export shortcut, adaptive_shortcut
 
-immutable RealVectorMetricSpace <: RealVectorStateSpace
+immutable RealVectorMetricSpace{T<:FloatingPoint} <: RealVectorStateSpace
     dim::Int
-    lo::Vector
-    hi::Vector
+    lo::Vector{T}
+    hi::Vector{T}
     dist::Metric
 end
 
-vector_to_state(v::Vector, SS::RealVectorMetricSpace) = SS.dim == 2 ? Vector2(v) : v
-sample_space(SS::RealVectorMetricSpace) = (v = SS.lo + rand(SS.dim).*(SS.hi-SS.lo); SS.dim == 2 ? Vector2(v) : v)
+vector_to_state{T}(v::AbstractVector{T}, SS::RealVectorMetricSpace) = SS.dim == 2 ? convert(Vector2{T}, v) : v
+sample_space(SS::RealVectorMetricSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)
+function volume(SS::RealVectorMetricSpace)
+    SS.dist == Euclidean() && return prod(SS.hi-SS.lo)
+    error("Volume not yet implemented for non-Euclidean metrics!")
+end
+function defaultNN{T}(SS::RealVectorMetricSpace{T}, init)
+    V = typeof(init)[init]
+    SS.dist == Euclidean() && return EuclideanNN_KDTree(V)
+    MetricNN_BruteForce(V, SS.dist)
+end
 
 ### Bounded Euclidean State Space
 
 BoundedEuclideanStateSpace(d::Int, lo::Vector, hi::Vector) = RealVectorMetricSpace(d, lo, hi, Euclidean())
 UnitHypercube(d::Int) = BoundedEuclideanStateSpace(d, zeros(d), ones(d))
 
-volume(SS::RealVectorMetricSpace) = prod(SS.hi-SS.lo)
-steer(SS::RealVectorMetricSpace, v::Vector, w::Vector, eps::Float64, distvw = norm(w - v)) = v + (w - v) * min(eps/distvw, 1)
-
-pairwise_distances{T}(V::Vector{Vector{T}}, SS::RealVectorMetricSpace, r_bound::Float64) = pairwise(SS.dist, hcat(V...))
-
 ### ADAPTIVE-SHORTCUT (Hsu 2000)
 
-function shortcut{T}(path::Vector{Vector{T}}, obs::ObstacleSet)
+function shortcut(path::Path, CC::CollisionChecker)
     N = length(path)
     if N == 2
         return path
     end
-    if is_free_motion(path[1], path[end], obs)
+    if is_free_motion(path[1], path[end], CC)
         return path[[1,end]]
     end
     mid = iceil(N/2)
-    return [shortcut(path[1:mid], obs)[1:end-1], shortcut(path[mid:end], obs)]
+    return [shortcut(path[1:mid], CC)[1:end-1], shortcut(path[mid:end], CC)]
 end
 
-function cut_corner(v1::Vector, v2::Vector, v3::Vector, obs::ObstacleSet)
+function cut_corner(v1::AbstractVector, v2::AbstractVector, v3::AbstractVector, CC::CollisionChecker)
     m1 = (v1 + v2)/2
     m2 = (v3 + v2)/2
-    while ~is_free_motion(m1, m2, obs)
+    while ~is_free_motion(m1, m2, CC)
         m1 = (m1 + v2)/2
         m2 = (m2 + v2)/2
     end
     return typeof(v1)[v1, m1, m2, v3]
 end
 
-function adaptive_shortcut{T}(path::Vector{Vector{T}}, obs::ObstacleSet, iterations::Int = 10)
-    while (short_path = shortcut(path, obs)) != path
+function adaptive_shortcut(path::Path, CC::CollisionChecker, iterations::Int = 10)
+    while (short_path = shortcut(path, CC)) != path
         path = short_path
     end
     for i in 1:iterations
-        path = [path[1:1], vcat([cut_corner(path[j-1:j+1]..., obs)[2:3] for j in 2:length(path)-1]...), path[end:end]]
-        while (short_path = shortcut(path, obs)) != path
+        path = [path[1:1], vcat([cut_corner(path[j-1:j+1]..., CC)[2:3] for j in 2:length(path)-1]...), path[end:end]]
+        while (short_path = shortcut(path, CC)) != path
             path = short_path
         end
     end

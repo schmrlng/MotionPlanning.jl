@@ -1,12 +1,12 @@
-immutable LinearQuadraticStateSpace <: DifferentialStateSpace
+immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     dim::Int
-    lo::Vector
-    hi::Vector
+    lo::Vector{T}
+    hi::Vector{T}
 
-    A::Matrix
-    B::Matrix
-    c::Vector
-    R::Matrix
+    A::Matrix{T}
+    B::Matrix{T}
+    c::Vector{T}
+    R::Matrix{T}
     G::Function
     Ginv::Function
     expAt::Function

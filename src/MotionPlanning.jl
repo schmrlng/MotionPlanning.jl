@@ -1,21 +1,27 @@
 module MotionPlanning
 
-# using PyPlot
+using PyPlot
 using ArrayViews
 using Devectorize
 using Iterators
 # using HypothesisTests
 using Distances
-using NearestNeighbors
-using Graphs
-using FLANN
+using KDTrees
+# using Graphs
 using ImmutableArrays
 
-include("problems.jl")
+### Planning Primitives
+abstract AbstractState
+typealias State Union(AbstractVector, AbstractState)
+typealias Path{T<:State} Vector{T}
+
+### Includes
+include("collisioncheckers.jl")
 include("nearneighbors.jl")
 # include("obstacles.jl")
 include("goals.jl")
 include("statespaces.jl")
+include("problems.jl")
 include("sampling.jl")
 include("planners.jl")
 include("plotting.jl")
