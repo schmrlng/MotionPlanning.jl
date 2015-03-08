@@ -21,7 +21,6 @@ typealias Path{T<:State} Vector{T}
 include("utilities/collections.jl")
 include("collisioncheckers.jl")
 include("nearneighbors.jl")
-# include("obstacles.jl")
 include("goals.jl")
 include("statespaces.jl")
 include("problems.jl")
