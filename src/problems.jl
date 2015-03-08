@@ -29,7 +29,7 @@ end
 
 MPProblem(SS::StateSpace, init::State, goal::Goal, CC::CollisionChecker) = MPProblem(SS, init, goal, CC, defaultNN(SS, init))
 
-function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true)
+function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
     SS && plot(P.SS)
     CC && plot(P.CC)
     goal && plot(P.goal)
@@ -40,5 +40,6 @@ function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true)
             # TODO: graph (PRM)
         end
         sol && plot_path(P.V.V, S.metadata["path"], color="blue")
+        smoothed && haskey(S.metadata, "smoothed_path") && plot_path(S.metadata["smoothed_path"], color="orange")
     end
 end

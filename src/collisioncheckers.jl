@@ -1,3 +1,4 @@
+export CollisionChecker, DiscreteCollisionChecker, SweptCollisionChecker
 export is_free_state, is_free_motion, is_free_path
 
 abstract CollisionChecker

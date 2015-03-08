@@ -11,6 +11,8 @@ using KDTrees
 using ImmutableArrays
 
 ### Planning Primitives
+export AbstractState, State, Path
+
 abstract AbstractState
 typealias State Union(AbstractVector, AbstractState)
 typealias Path{T<:State} Vector{T}
@@ -25,6 +27,7 @@ include("statespaces.jl")
 include("problems.jl")
 include("sampling.jl")
 include("planners.jl")
+include("postprocessors.jl")
 include("plotting.jl")
 
 end # module
