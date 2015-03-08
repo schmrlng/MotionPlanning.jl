@@ -10,4 +10,13 @@ ISRR_2H = Compound2D(
     ]
 )
 
+TRI_BALLS = Compound2D(
+    Shape2D{Float64}[
+        Polygon([(.3,.3), (.7,.3), (.5,.65)]),
+        Circle([.3,.3], .15),
+        Circle([.7,.3], .15),
+        Circle([.5,.65], .15)
+    ]
+)
+
 nothing

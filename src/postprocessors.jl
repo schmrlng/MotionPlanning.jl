@@ -37,11 +37,11 @@ function adaptive_shortcut(path::Path, CC::CollisionChecker, iterations::Int = 1
     return path, sum(mapslices(norm, diff(hcat(path...), 2), 1))
 end
 
-function adaptive_shortcut!(P::MPProblem)
+function adaptive_shortcut!(P::MPProblem, iterations::Int = 10)
     P.status != :solved && error("Cannot post-process unsovled problem! (adaptive-shortcut)")
     (!isa(P.SS, RealVectorMetricSpace) || P.SS.dist != Euclidean()) && error("Adaptive-shortcut requires Euclidean SS")
     S = P.solution
-    smoothed_path, smoothed_cost = adaptive_shortcut(P.V.V[S.metadata["path"]], P.CC)
+    smoothed_path, smoothed_cost = adaptive_shortcut(P.V.V[S.metadata["path"]], P.CC, iterations)
     S.metadata["smoothed_path"] = smoothed_path
     S.metadata["smoothed_cost"] = smoothed_cost
     smoothed_cost

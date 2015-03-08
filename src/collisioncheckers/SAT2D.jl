@@ -201,11 +201,10 @@ colliding(S::Line, C::Compound2D) = colliding(C,S)
 ## Swept collisions
 function colliding_ends_free(L::Line, C::Circle)
     AABBseparated(L,C) && return false
-    cv = L.v-C.c
-    cw = L.w-C.c
+    vc = C.c-L.v
     d2 = norm2(L.edge)
-    d2*C.r^2 < cross(cv, cw)^2 && return false
-    0 <= dot(cv,L.edge) <= d2
+    d2*C.r^2 < cross(L.edge, vc)^2 && return false
+    0 <= dot(vc, L.edge) <= d2
 end
 colliding(L::Line, C::Circle) = colliding_ends_free(L,C) || colliding(L.v,C) || colliding(L.w,C)
 colliding_ends_free(C::Circle, L::Line) = colliding_ends_free(L,C) 
