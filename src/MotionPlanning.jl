@@ -16,6 +16,7 @@ typealias State Union(AbstractVector, AbstractState)
 typealias Path{T<:State} Vector{T}
 
 ### Includes
+include("utilities/collections.jl")
 include("collisioncheckers.jl")
 include("nearneighbors.jl")
 # include("obstacles.jl")

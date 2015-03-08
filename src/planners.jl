@@ -10,7 +10,8 @@ function fmtstar!(P::MPProblem, N::Int, rm::Float64 = 1.0)
     W = trues(N); W[1] = false
     H = falses(N); H[1] = true
     C = zeros(Float64,N)
-    z = 1
+    HHeap = CollectionsJ4.PriorityQueue([1], [0.])
+    z = CollectionsJ4.dequeue!(HHeap)    # i.e. z = 1
 
     k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1)
 
@@ -23,14 +24,15 @@ function fmtstar!(P::MPProblem, N::Int, rm::Float64 = 1.0)
             if (collision_checks = collision_checks + 1; is_free_motion(P.V[x], P.V[y_min], P.CC, P.SS))
                 A[x] = y_min
                 C[x] = c_min
+                HHeap[x] = c_min
                 push!(H_new, x)
                 W[x] = false
             end
         end
         H[H_new] = true
         H[z] = false
-        if any(H)
-            z = find(H)[indmin(C[H])]
+        if !isempty(HHeap)
+            z = CollectionsJ4.dequeue!(HHeap)
         else
             break
         end

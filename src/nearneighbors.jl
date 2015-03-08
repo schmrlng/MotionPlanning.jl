@@ -93,7 +93,7 @@ function knn!(NN::MetricNN, v::Int, k = 1)
     if !isdefined(NN.cache, v)
         nbhd = knn(NN, v, k)
         NN.cache[v] = nbhd
-        NN.kNNr[v] = maximum(nbhd.ds[end])
+        NN.kNNr[v] = nbhd.ds[end]
     end
     return NN.cache[v]
 end
@@ -105,7 +105,7 @@ function mutualknn!(NN::MetricNN, v::Int, k, f::BitVector)
     for w in n.inds
         knn!(NN, w, k)       # to ensure neighbors' respective knn sets have been computed
     end
-    mutual_inds = f[n.inds] & (n.ds .<= NN.kNNr[n.inds])
+    @devec mutual_inds = f[n.inds] & (n.ds .<= NN.kNNr[n.inds])
     return Neighborhood(n.inds[mutual_inds], n.ds[mutual_inds])
 end
 
