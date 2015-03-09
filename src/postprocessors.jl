@@ -46,3 +46,16 @@ function adaptive_shortcut!(P::MPProblem, iterations::Int = 10)
     S.metadata["smoothed_cost"] = smoothed_cost
     smoothed_cost
 end
+
+### Path discretization (Euclidean)
+
+function discretize_path(path::Path, dx)
+    path = path[[true, map(norm, diff(path)) .> dx / 4]] # cut out tiny waypoint steps
+    dpath = path[1:1]
+    for i in 2:length(path)
+        segment_length = norm(path[i] - path[i-1])
+        M = ceil(segment_length / dx)
+        append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
+    end
+    dpath
+end

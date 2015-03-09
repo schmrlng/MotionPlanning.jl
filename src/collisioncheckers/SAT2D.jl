@@ -221,6 +221,19 @@ colliding(L::Line, P::Polygon) = colliding_ends_free(L, P)
 colliding_ends_free(P::Polygon, L::Line) = colliding_ends_free(L,P) 
 colliding(P::Polygon, L::Line) = colliding(L,P)
 
+# ---------- Transformations ----------
+
+inflate(C::Circle, eps) = Circle(C.c, C.r + eps)
+function inflate(P::Polygon, eps)
+    N = length(P.points)
+    S = eltype(P.points)
+    Compound2D([
+        Polygon(vcat([S[P.points[i] + eps*P.normals[wrap1(i-1,N)], P.points[i] + eps*P.normals[i]] for i in 1:N]...)),
+        [Circle(p, eps) for p in P.points]...
+    ])
+end
+inflate{T}(C::Compound2D{T}, eps) = Compound2D(Shape2D{T}[inflate(P, eps) for P in C.parts])
+
 # ---------- Plotting ----------
 
 plot(C::Circle; kwargs...) = plot_circle(C.c, C.r; kwargs...)
