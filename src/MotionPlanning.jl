@@ -1,6 +1,6 @@
 module MotionPlanning
 
-# using PyPlot
+using PyPlot
 using ArrayViews
 using Devectorize
 using Iterators

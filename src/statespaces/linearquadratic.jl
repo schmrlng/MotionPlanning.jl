@@ -1,3 +1,16 @@
+export LinearQuadraticStateSpace
+
+type FinalTime{T<:FloatingPoint} <: ControlInfo
+    t::T
+end
+
+type LinearQuadratic{T<:FloatingPoint} <: PreMetric
+    tmax::T
+    Ginv::Function
+    expAt::Function
+    cdrift::Function
+end
+
 immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     dim::Int
     lo::Vector{T}
@@ -16,35 +29,30 @@ immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     cost::Function
     cost_deriv::Function
     x::Function
-end
 
-# immutable QuasiMetricProblem <: ProblemSetup
-#     init::Vector{Float64}
-#     goal::Goal
-#     obs::ObstacleSet
-#     V0::Vector{Vector{Float64}}
-#     SS::LinearQuadraticStateSpace
-#     config_name::String
-# end
-
-# immutable QuasiMetricNN <: NearNeighborCache
-#     V::Vector{Vector{Float64}}
-#     D::Matrix
-#     TT::Matrix
-#     NNF::Vector{Vector{Int64}}
-#     NNB::Vector{Vector{Int64}}
-# end
-
-function LinearQuadraticStateSpace(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift)
-    xbar(x0, t) = expAt(t)*x0 + cdrift(t)
-    cost(x0, x1, t) = ( t + (x1 - xbar(x0,t))'*Ginv(t)*(x1 - xbar(x0,t)) )[1]
-    function cost_deriv(x0, x1, t)
-        d = Ginv(t)*(x1 - xbar(x0,t))
-        return ( 1 - 2*(A*x1 + c)'*d - d'*B*inv(R)*B'*d )[1]
+    function LinearQuadraticStateSpace(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift)
+        xbar(x0, t) = expAt(t)*x0 + cdrift(t)
+        cost(x0, x1, t) = ( t + (x1 - xbar(x0,t))'*Ginv(t)*(x1 - xbar(x0,t)) )[1]
+        function cost_deriv(x0, x1, t)
+            d = Ginv(t)*(x1 - xbar(x0,t))
+            return ( 1 - 2*(A*x1 + c)'*d - d'*B*inv(R)*B'*d )[1]
+        end
+        x(x0, x1, t, s) = xbar(x0,s) + G(s)*expAt(t-s)'*Ginv(t)*(x1 - xbar(x0,t))
+        new(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift, xbar, cost, cost_deriv, x)
     end
-    x(x0, x1, t, s) = xbar(x0,s) + G(s)*expAt(t-s)'*Ginv(t)*(x1 - xbar(x0,t))
+end
+LinearQuadraticStateSpace{T<:FloatingPoint}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) =
+    LinearQuadraticStateSpace{T<:FloatingPoint}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) # so constructor works without {}
 
-    return LinearQuadraticStateSpace(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift, xbar, cost, cost_deriv, x)
+vector_to_state{T}(v::AbstractVector{T}, SS::LinearQuadraticStateSpace) = SS.dim == 2 ? convert(Vector2{T}, v) : v
+sample_space(SS::LinearQuadraticStateSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
+function volume(SS::LinearQuadraticStateSpace)
+    warn("TODO: what is volume for a LinearQuadraticStateSpace?")
+    prod(SS.hi-SS.lo)
+end
+function defaultNN{T}(SS::RealVectorMetricSpace{T}, init)
+    V = typeof(init)[init]
+    QuasiMetricNN_BruteForce(V, SS.dist)
 end
 
 volume(SS::LinearQuadraticStateSpace) = prod(SS.hi-SS.lo)
@@ -81,39 +89,7 @@ function NNCache{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound
     return QuasiMetricNN(V, pairwise_distances(V, SS, t_bound)..., fill(Int64[], length(V)), fill(Int64[], length(V)))
 end
 
-function nearRF(NN::QuasiMetricNN, v::Int64, r::Float64)
-    if isempty(NN.NNF[v])
-        nn_bool = NN.D[v,:] .< r
-        nn_bool[v] = false
-        nn_idx = find(nn_bool)
-        NN.NNF[v] = nn_idx
-    else
-        nn_idx = NN.NNF[v]
-    end
-    return nn_idx, vec(NN.D[v, nn_idx])
-end
 
-function nearRB(NN::QuasiMetricNN, v::Int64, r::Float64)
-    if isempty(NN.NNB[v])
-        nn_bool = NN.D[:,v] .< r
-        nn_bool[v] = false
-        nn_idx = find(nn_bool)
-        NN.NNB[v] = nn_idx
-    else
-        nn_idx = NN.NNB[v]
-    end
-    return nn_idx, NN.D[nn_idx, v]
-end
-
-function nearRF(NN::NearNeighborCache, v::Int64, r::Float64, filter::BitVector)
-    nn_idx, D = nearRF(NN, v, r)
-    return nn_idx[filter[nn_idx]], D[filter[nn_idx]]
-end
-
-function nearRB(NN::NearNeighborCache, v::Int64, r::Float64, filter::BitVector)
-    nn_idx, D = nearRB(NN, v, r)
-    return nn_idx[filter[nn_idx]], D[filter[nn_idx]]
-end
 
 function waypoints(i::Int64, j::Int64, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5)       # make arg ordering consistent NN to front
     return hcat([SS.x(NN.V[i], NN.V[j], NN.TT[i,j], s) for s in linspace(0, NN.TT[i,j], res)]...)

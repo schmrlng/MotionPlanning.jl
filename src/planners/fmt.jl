@@ -2,7 +2,7 @@ export fmtstar!
 
 function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0)
     tic()
-    collision_checks = 0
+    P.CC.count = 0
 
     # TODO: staged functions (Julia v0.4) for knn vs ball... or something clever in v0.3
     # if isa(P.V, MetricNN)       # do i even need this casework?
@@ -31,7 +31,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0)
             neighborhood = nearB(P.V, x, k, H)
             c_min, y_idx = findmin(C[neighborhood.inds] + neighborhood.ds)
             y_min = neighborhood.inds[y_idx]
-            if (collision_checks += 1; is_free_motion(P.V[y_min], P.V[x], P.CC, P.SS))
+            if is_free_motion(P.V[y_min], P.V[x], P.CC, P.SS)
                 A[x] = y_min
                 C[x] = c_min
                 HHeap[x] = c_min
@@ -56,7 +56,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0)
     P.status = is_goal_pt(P.V[z], P.goal) ? :solved : :failed
     solution_metadata = {
         "radius_multiplier" => rm,
-        "collision_checks" => collision_checks,
+        "collision_checks" => P.CC.count,
         "num_samples" => N,
         "cost" => C[z],
         "planner" => "FMTstar",

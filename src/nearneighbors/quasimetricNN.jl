@@ -13,13 +13,14 @@ type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: Quasi
 
     function QuasiMetricNN_BruteForce(V::Vector{S}, dist::QuasiMetric)
         N = length(V)
-        new(V, pairwise(dist, hcat(V...)), 
+        DS, US = pairwise_distances(dist, V)
+        new(V, DS, 
             Array(Neighborhood{T}, N),
             Array(Neighborhood{T}, N),
             zeros(T, N),
             zeros(T, N),
             dist,
-            Array(u, N, N))
+            US)
     end
 end
 QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
