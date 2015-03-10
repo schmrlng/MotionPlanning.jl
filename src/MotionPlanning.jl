@@ -29,4 +29,6 @@ include("planners.jl")
 include("postprocessors.jl")
 include("plotting.jl")
 
+# TODO: test suite!
+
 end # module

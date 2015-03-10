@@ -18,22 +18,22 @@ immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     x::Function
 end
 
-immutable QuasiMetricProblem <: ProblemSetup
-    init::Vector{Float64}
-    goal::Goal
-    obs::ObstacleSet
-    V0::Vector{Vector{Float64}}
-    SS::LinearQuadraticStateSpace
-    config_name::String
-end
+# immutable QuasiMetricProblem <: ProblemSetup
+#     init::Vector{Float64}
+#     goal::Goal
+#     obs::ObstacleSet
+#     V0::Vector{Vector{Float64}}
+#     SS::LinearQuadraticStateSpace
+#     config_name::String
+# end
 
-immutable QuasiMetricNN <: NearNeighborCache
-    V::Vector{Vector{Float64}}
-    D::Matrix
-    TT::Matrix
-    NNF::Vector{Vector{Int64}}
-    NNB::Vector{Vector{Int64}}
-end
+# immutable QuasiMetricNN <: NearNeighborCache
+#     V::Vector{Vector{Float64}}
+#     D::Matrix
+#     TT::Matrix
+#     NNF::Vector{Vector{Int64}}
+#     NNB::Vector{Vector{Int64}}
+# end
 
 function LinearQuadraticStateSpace(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift)
     xbar(x0, t) = expAt(t)*x0 + cdrift(t)

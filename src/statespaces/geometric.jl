@@ -8,7 +8,7 @@ immutable RealVectorMetricSpace{T<:FloatingPoint} <: RealVectorStateSpace
 end
 
 vector_to_state{T}(v::AbstractVector{T}, SS::RealVectorMetricSpace) = SS.dim == 2 ? convert(Vector2{T}, v) : v
-sample_space(SS::RealVectorMetricSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)
+sample_space(SS::RealVectorMetricSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
 function volume(SS::RealVectorMetricSpace)
     SS.dist == Euclidean() && return prod(SS.hi-SS.lo)
     error("Volume not yet implemented for non-Euclidean metrics!")

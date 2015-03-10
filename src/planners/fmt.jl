@@ -1,9 +1,19 @@
 export fmtstar!
 
-function fmtstar!(P::MPProblem, N::Int, rm::Float64 = 1.0)
+function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0)
     tic()
     collision_checks = 0
 
+    # TODO: staged functions (Julia v0.4) for knn vs ball... or something clever in v0.3
+    # if isa(P.V, MetricNN)       # do i even need this casework?
+    #     nearF = mutualknn!
+    #     nearB = knn!
+    # else
+    #     nearF = mutualknnF!
+    #     nearB = knnB!
+    # end
+    nearF = mutualknnF!
+    nearB = knnB!
     free_volume_ub = sample_free!(P, N - length(P.V))
 
     A = zeros(Int,N)
@@ -17,11 +27,11 @@ function fmtstar!(P::MPProblem, N::Int, rm::Float64 = 1.0)
 
     while ~is_goal_pt(P.V[z], P.goal)
         H_new = Int[]
-        for x in mutualknn!(P.V, z, k, W).inds
-            neighborhood = knn!(P.V, x, k, H)
+        for x in nearF(P.V, z, k, W).inds
+            neighborhood = nearB(P.V, x, k, H)
             c_min, y_idx = findmin(C[neighborhood.inds] + neighborhood.ds)
             y_min = neighborhood.inds[y_idx]
-            if (collision_checks = collision_checks + 1; is_free_motion(P.V[x], P.V[y_min], P.CC, P.SS))
+            if (collision_checks += 1; is_free_motion(P.V[y_min], P.V[x], P.CC, P.SS))
                 A[x] = y_min
                 C[x] = c_min
                 HHeap[x] = c_min
