@@ -9,13 +9,14 @@ type MetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     dist::Metric
     US::Matrix{U}
 
-    function MetricNN_BruteForce(V::Vector{S}, dist::Metric = Euclidean(), u::DataType = NullControl)
+    function MetricNN_BruteForce(V::Vector{S}, dist::Metric = Euclidean())
         N = length(V)
-        new(V, pairwise(dist, hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), dist, Array(u, N, N))
+        DS, US = pairwise_distances(dist, V)
+        new(V, DS, Array(Neighborhood{T}, N), zeros(T, N), dist, US)
     end
 end
-MetricNN_BruteForce{S<:State}(V::Vector{S}, dist::Metric = Euclidean(), u::DataType = NullControl) =
-    MetricNN_BruteForce{S,eltype(S),u}(V,dist,u) # so constructor works without {}
+MetricNN_BruteForce{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
+    MetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
 
 function inball(NN::MetricNN_BruteForce, v::Int, r)
     @devec nn_bool = NN.DS[:,v] .<= r
@@ -42,15 +43,14 @@ type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: Me
     dist::Metric
     US::Matrix{U}
 
-    function EuclideanNN_KDTree(V::Vector{S}, dist::Metric = Euclidean(), u::DataType = NullControl)
+    function EuclideanNN_KDTree(V::Vector{S}, dist::Metric = Euclidean())
         N = length(V)
         dist != Euclidean() && error("Distance metric must be Euclidean for EuclideanNN_KDTree")
-        u != NullControl && error("EuclideanNN_KDTree doesn't store control info (i.e. NullControl)")
         new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), Euclidean(), Array(NullControl, 0, 0)) # TODO: leafsize, reorder?
     end
 end
-EuclideanNN_KDTree{S<:State}(V::Vector{S}, dist::Metric = Euclidean(), u::DataType = NullControl) =
-    EuclideanNN_KDTree{S,eltype(S),u}(V,dist,u) # so constructor works without {}
+EuclideanNN_KDTree{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
+    EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
 
 function inball{S,T}(NN::EuclideanNN_KDTree{S,T}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN.V[v]), r, true)

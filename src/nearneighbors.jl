@@ -1,6 +1,6 @@
 import Base.length, Base.getindex
-export NearNeighborCache, MetricNN, QuasiMetricNN, Neighborhood
-export filter_neighborhood, addpoints
+export NearNeighborCache, MetricNN, QuasiMetricNN, Neighborhood, ControlInfo, NullControl
+export filter_neighborhood, addpoints, controltype
 export inball, knn, inball!, knn!, mutualknn!         # for metrics only (symmetric)
 export inballF, knnF, inballF!, knnF!, mutualknnF!    # forwards
 export inballB, knnB, inballB!, knnB!, mutualknnB!    # backwards
@@ -18,7 +18,8 @@ type Neighborhood{T<:FloatingPoint}
 end
 filter_neighborhood(n::Neighborhood, f::BitVector) = Neighborhood(n.inds[f[n.inds]], n.ds[f[n.inds]])
 
-addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V, W], NN.dist, eltype(NN.US))
+controltype(d::PreMetric) = NullControl
+addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V, W], NN.dist)
 length(NN::NearNeighborCache) = length(NN.V)
 getindex(NN::NearNeighborCache, i) = NN.V[i]
 

@@ -23,3 +23,4 @@ end
 
 BoundedEuclideanStateSpace(d::Int, lo::Vector, hi::Vector) = RealVectorMetricSpace(d, lo, hi, Euclidean())
 UnitHypercube(d::Int) = BoundedEuclideanStateSpace(d, zeros(d), ones(d))
+pairwise_distances{S<:State}(dist::Euclidean, V::Vector{S}) = (pairwise(dist, hcat(V...)), Array(NullControl, 0, 0))

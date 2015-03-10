@@ -1,3 +1,5 @@
+abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and triangle inequality (no symmetry)
+
 ### Quasimetric brute force
 type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
@@ -6,10 +8,10 @@ type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: Quasi
     cacheB::Vector{Neighborhood{T}}
     kNNrF::Vector{T}
     kNNrB::Vector{T}
-    dist::Metric
+    dist::QuasiMetric
     US::Matrix{U}
 
-    function QuasiMetricNN_BruteForce(V::Vector{S}, dist::Metric, u::DataType = NullControl)
+    function QuasiMetricNN_BruteForce(V::Vector{S}, dist::QuasiMetric)
         N = length(V)
         new(V, pairwise(dist, hcat(V...)), 
             Array(Neighborhood{T}, N),
@@ -20,8 +22,8 @@ type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: Quasi
             Array(u, N, N))
     end
 end
-QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::Metric, u::DataType = NullControl) =
-    QuasiMetricNN_BruteForce{S,eltype(S),u}(V,dist,u) # so constructor works without {}
+QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
+    QuasiMetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
 
 ## Forwards
 
