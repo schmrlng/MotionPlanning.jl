@@ -1,3 +1,5 @@
+export QuasiMetric, QuasiMetricNN_BruteForce
+
 abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and triangle inequality (no symmetry)
 
 ### Quasimetric brute force
@@ -32,7 +34,7 @@ function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
     @devec nn_bool = NN.DS[v,:] .<= r
     nn_bool[v] = false
     inds = find(nn_bool)
-    Neighborhood(inds, NN.DS[v,inds])
+    Neighborhood(inds, vec(NN.DS[v,inds]))
 end
 
 function knnF(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
@@ -55,7 +57,7 @@ end
 
 function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
     r = select!(NN.DS[:,v], k+1)     # TODO: could be faster with an ArrayView and leveraging quickselect algo
-    nbhd = inball(NN, v, r)
+    nbhd = inballB(NN, v, r)
     p = sortperm(nbhd.ds)
     permute!(nbhd.inds, p)
     permute!(nbhd.ds, p)

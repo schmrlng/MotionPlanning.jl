@@ -1,183 +1,172 @@
-export LinearQuadraticStateSpace
+export FinalTime, LinearQuadratic, LinearQuadraticOpt
+export LinearQuadraticStateSpace, DoubleIntegrator
 
+
+### Linear Quadratic Steering
 type FinalTime{T<:FloatingPoint} <: ControlInfo
     t::T
 end
-
-type LinearQuadratic{T<:FloatingPoint} <: PreMetric
-    tmax::T
-    Ginv::Function
-    expAt::Function
-    cdrift::Function
+abstract LinearQuadratic{T<:FloatingPoint} <: QuasiMetric
+## Optimal Steering
+type LinearQuadraticOpt{T} <: LinearQuadratic{T}
+    steer::Function
+    tmax::T         # for potential pruning
 end
+LinearQuadraticOpt(cost::Function) = LinearQuadraticOpt(cost::Function, 1.)
+function LinearQuadraticOpt{T<:FloatingPoint}(cost::Function, cost_deriv::Function, tmax::T = 1.)
+    function topt(x0, x1, tm)
+        # Bisection
+        b = tm
+        cost_deriv(x0, x1, b) < 0 && return tm
+        a = .01
+        while cost_deriv(x0, x1, a) > 0; a /= 2; end
+        m = 0.
+        for i in 1:10
+            m = (a+b)/2
+            cost_deriv(x0, x1, m) > 0 ? b = m : a = m
+        end
+        m
+    end
+    function steer(x0, x1, tm)
+        t = topt(x0, x1, tm)
+        cost(x0, x1, t), FinalTime(t)
+    end
+    LinearQuadraticOpt(steer, tmax)
+end
+## TODO: Approximate(ly Optimal) Steering
+# type LinearQuadraticApprox{T<:FloatingPoint} <: LinearQuadratic
+#
+# end
+controltype(d::LinearQuadratic) = FinalTime
 
+### Linear Quadratic State Space
 immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     dim::Int
     lo::Vector{T}
     hi::Vector{T}
+    dist::LinearQuadratic{T}
+    x::Function
 
     A::Matrix{T}
     B::Matrix{T}
     c::Vector{T}
     R::Matrix{T}
-    G::Function
-    Ginv::Function
-    expAt::Function
-    cdrift::Function
-
-    xbar::Function
-    cost::Function
-    cost_deriv::Function
-    x::Function
-
-    function LinearQuadraticStateSpace(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift)
-        xbar(x0, t) = expAt(t)*x0 + cdrift(t)
-        cost(x0, x1, t) = ( t + (x1 - xbar(x0,t))'*Ginv(t)*(x1 - xbar(x0,t)) )[1]
-        function cost_deriv(x0, x1, t)
-            d = Ginv(t)*(x1 - xbar(x0,t))
-            return ( 1 - 2*(A*x1 + c)'*d - d'*B*inv(R)*B'*d )[1]
-        end
-        x(x0, x1, t, s) = xbar(x0,s) + G(s)*expAt(t-s)'*Ginv(t)*(x1 - xbar(x0,t))
-        new(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift, xbar, cost, cost_deriv, x)
-    end
 end
-LinearQuadraticStateSpace{T<:FloatingPoint}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) =
-    LinearQuadraticStateSpace{T<:FloatingPoint}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) # so constructor works without {}
+## Optimal Steering
+LinearQuadraticStateSpace(dim::Int, lo::Vector, hi::Vector,
+                          A::Matrix, B::Matrix, c::Vector, R::Matrix,
+                          cost::Function, cost_deriv::Function, x::Function) =
+    LinearQuadraticStateSpace(dim, lo, hi, LinearQuadraticOpt(cost, cost_deriv), x, A, B, c, R)
+## TODO: Approximate Steering
+# LinearQuadraticStateSpace(dim::Int, lo::Vector{T}, hi::Vector{T},
+#                           A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Matrix{T},
+#                           G::Function, Ginv::Function, expAt::Function, cdrift::Function) =
+#     LinearQuadraticStateSpace{T}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) # so constructor works without {}
 
-vector_to_state{T}(v::AbstractVector{T}, SS::LinearQuadraticStateSpace) = SS.dim == 2 ? convert(Vector2{T}, v) : v
+vector_to_state{T}(v::AbstractVector{T}, SS::LinearQuadraticStateSpace) = v
 sample_space(SS::LinearQuadraticStateSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
 function volume(SS::LinearQuadraticStateSpace)
     warn("TODO: what is volume for a LinearQuadraticStateSpace?")
     prod(SS.hi-SS.lo)
 end
-function defaultNN{T}(SS::RealVectorMetricSpace{T}, init)
+function defaultNN(SS::LinearQuadraticStateSpace, init)
     V = typeof(init)[init]
     QuasiMetricNN_BruteForce(V, SS.dist)
 end
 
-volume(SS::LinearQuadraticStateSpace) = prod(SS.hi-SS.lo)
-
-function pairwise_distances{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound::Float64)
-    return pairwise_distances_approx_opt(V, SS, t_bound)
-end
-
-function pairwise_distances_approx_opt{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound::Float64, res::Int64 = 10)
+function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LinearQuadraticOpt{T}, V::Vector{S})
     N = length(V)
-    V1 = hcat(V...)
-    t = t_bound/2.
-    V0bar = SS.expAt(t)*V1 .+ SS.cdrift(t)
-    return (t + pairwise(SqMahalanobis(SS.Ginv(t)), V0bar, V1)), fill(t, N, N)
+    VM = hcat(V...)
+    DS = Array(T, N, N)
+    US = Array(FinalTime, N, N)
+    for j = 1 : N
+        vj = view(VM,:,j)
+        for i = 1 : N
+            @inbounds DS[i,j], US[i,j] = dist.steer(view(VM,:,i), vj, dist.tmax)
+        end
+    end
+    DS, US
 end
 
-# function pairwise_distances_naive_opt{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound::Float64)
-#     N = length(V)
-#     D = fill(Inf, N, N)
-#     TT = fill(Inf, N, N)
-#     for j = 1:N
-#         for i = 1:N
-#             if i != j
-#                 t_opt = try fzero(t -> SS.cost_deriv(V[i],V[j],t), 0.001, t_bound) catch; continue end
-#                 @inbounds D[i,j] = SS.cost(V[i], V[j], t_opt)
-#                 @inbounds TT[i,j] = t_opt
-#             end
-#         end
-#     end
-#     return D, TT
-# end
-
-function NNCache{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound::Float64)        # consider pre-filling NNF, NNB here?
-    return QuasiMetricNN(V, pairwise_distances(V, SS, t_bound)..., fill(Int64[], length(V)), fill(Int64[], length(V)))
+waypoints(i, j, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5) = [Vector2(SS.x(NN[i], NN[j], NN.US[i,j].t, s)) for s in linspace(0, NN.US[i,j].t, res)]
+function inbounds(v, SS::LinearQuadraticStateSpace)
+    for i in 1:length(v)
+        (SS.lo[i] > v[i] || v[i] > SS.hi[i]) && return false
+    end
+    true
 end
-
-
-
-function waypoints(i::Int64, j::Int64, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5)       # make arg ordering consistent NN to front
-    return hcat([SS.x(NN.V[i], NN.V[j], NN.TT[i,j], s) for s in linspace(0, NN.TT[i,j], res)]...)
+is_free_state(v, CC::PointRobot2D, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(Vector2(v), CC)
+function is_free_motion(v, w, CC::PointRobot2D, SS::LinearQuadraticStateSpace)   # TODO: inputs V, i, j instead of v, w
+    t = (SS.dist.steer(v, w, SS.dist.tmax)[2]).t   # terrible, hmm
+    for s in linspace(0, t, 5)
+        y = SS.x(v, w, t, s)
+        !inbounds(y, SS) && return false
+        vy = Vector2(y)
+        s > 0 && !is_free_motion(vx, vy, CC) && return false
+        vx = vy
+    end
+    true
 end
+# TODO: is_free_path(path, CC::PointRobot2D, SS::LinearQuadraticStateSpace)
 
-function is_free_motion(i::Int64, j::Int64, NN::QuasiMetricNN, obs::ObstacleSet, SS::LinearQuadraticStateSpace)
-    wps = waypoints(i, j, NN, SS)
-    return all(SS.lo .<= wps .<= SS.hi) && is_free_path(Vector{Float64}[wps[:,c] for c in 1:size(wps,2)], obs)
-end
-
-function plot_tree(NN::QuasiMetricNN, A, SS::LinearQuadraticStateSpace, col="black"; kwargs...)
-    pts = hcat(NN.V[find(A)]...)
+function plot_tree(SS::LinearQuadraticStateSpace, NN::QuasiMetricNN, A; kwargs...)
+    pts = hcat(NN[find(A)]...)
     scatter(pts[1,:], pts[2,:], zorder=1; kwargs...)
-    X = vcat([[waypoints(A[v], v, NN, SS, 20)[1,:]', nothing] for v in find(A)]...)
-    Y = vcat([[waypoints(A[v], v, NN, SS, 20)[2,:]', nothing] for v in find(A)]...)
-    # @show X
-    plt.plot(X, Y, color=col, linewidth=.5, linestyle="-", zorder=1; kwargs...)
+    X = vcat([[hcat(waypoints(A[v], v, NN, SS, 20)...)[1,:]', nothing] for v in find(A)]...)
+    Y = vcat([[hcat(waypoints(A[v], v, NN, SS, 20)...)[2,:]', nothing] for v in find(A)]...)
+    plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
 
-function plot_solution(NN::QuasiMetricNN, sol, SS::LinearQuadraticStateSpace, disc = 20, col="black"; kwargs...)
-    pts = hcat(NN.V[sol]...)
-    scatter(pts[1,:], pts[2,:], zorder=2, color=col, s=25; kwargs...)
-    if length(sol) > 1
-        wps = hcat([waypoints(sol[i], sol[i+1], NN, SS, disc) for i in 1:length(sol)-1]...)
-        plot_path(wps, color=col, linewidth=2.0; kwargs...)
-        plt.quiver([wps[row,1:3:end]' for row in 1:4]..., zorder=5, width=.003, headwidth=8)
-        # print(maximum(abs(wps),2))
-    end
+function plot_path(SS::LinearQuadraticStateSpace, NN::QuasiMetricNN, sol; kwargs...)
+    wps = hcat([hcat(waypoints(sol[i], sol[i+1], NN, SS, 20)...) for i in 1:length(sol)-1]...)
+    length(sol) > 1 && plot_path(wps; kwargs...)
+    # plt.quiver([wps[row,1:3:end]' for row in 1:4]..., zorder=5, width=.003, headwidth=8)
 end
 
-function fmtstar(P::QuasiMetricProblem, N::Int64, r::Float64)
-    tic()
-    collision_checks = 0
+### Double Integrator State Space
 
-    V, free_volume_ub = sample_free(P, N)
-    NN = NNCache(V, P.SS, r)
+function DoubleIntegrator(d::Int, lo = zeros(d), hi = ones(d); vmax = 1.5, r = 1.)
+    A = [zeros(d,d) eye(d); zeros(d,2d)]
+    B = [zeros(d,d); eye(d)]
+    c = zeros(2d)
+    R = r*eye(d)
+    G(t) = [(t^3/(3r))*eye(d) (t^2/(2r))*eye(d);
+            (t^2/(2r))*eye(d) (t/r)*eye(d)]
+    Ginv(t) = [(12r/t^3)*eye(d) (-6r/t^2)*eye(d);
+               (-6r/t^2)*eye(d) (4r/t)*eye(d)]
+    expAt(t) = [eye(d) t*eye(d); zeros(d,d) eye(d)]
+    cdrift(t) = zeros(2d)
 
-    tic()
-    A = zeros(Int64,N)
-    W = trues(N)
-    W[1] = false
-    H = falses(N)
-    H[1] = true
-    C = zeros(N)
-    z = 1
-
-    while ~is_goal_pt(V[z], P.goal)
-        H_new = Int64[]
-        for x in nearRF(NN, z, r, W)[1]
-            Y_near, D_near = nearRB(NN, x, r, H)
-            c_min, y_idx = findmin(C[Y_near] + D_near)
-            y_min = Y_near[y_idx]
-            if (collision_checks = collision_checks + 1; is_free_motion(y_min, x, NN, P.obs, P.SS))   # doesn't matter for other algs, but should make "direction" consistent elsewhere
-                A[x] = y_min
-                C[x] = c_min
-                push!(H_new, x)
-                W[x] = false
-            end
+    if d == 2       # TODO: figure how to do this symbolically using Calculus.jl
+        dx(x0, x1, t) = (x1[1] - x0[1] - t*x0[3], x1[2] - x0[2] - t*x0[4], x1[3] - x0[3], x1[4] - x0[4])
+        function cost(x0, x1, t)
+            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
+            t + 12r/t^3*(dx1^2 + dx2^2) - 12r/t^2*(dx1*dx3 + dx2*dx4) + 4r/t*(dx3^2 + dx4^2)
         end
-        H[H_new] = true
-        H[z] = false
-        if any(H)
-            z = find(H)[indmin(C[H])]
-        else
-            break
-            # return Inf, Int64[], V, A
+        function cost_deriv(x0, x1, t)
+            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
+            1. - 36r/t^4*(dx1^2 + dx2^2) - 12r/t^3*(2dx1*x0[3] + 2dx2*x0[4]) + 24r/t^3*(dx1*dx3 + dx2*dx4) + 12r/t^2*(x0[3]*dx3 + x0[4]*dx4) - 4r/t^2*(dx3^2 + dx4^2)
         end
+        function x(x0, x1, t, s)
+            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
+            m11, m12, m21, m22 = (-2s^3/t^3 + 3s^2/t^2, s^3/t^2 - s^2/t, -6s^2/t^3 + 6s/t^2, 3s^2/t^2 - 2s/t)
+            [x0[1] + s*x0[3] + m11*dx1 + m12*dx3,
+             x0[2] + s*x0[4] + m11*dx2 + m12*dx4,
+             x0[3] + m21*dx1 + m22*dx3,
+             x0[4] + m21*dx2 + m22*dx4]
+        end
+        return LinearQuadraticStateSpace(2d, [lo, -vmax*ones(d)], [hi, vmax*ones(d)], A, B, c, R, cost, cost_deriv, x)
+    else
+        error("TODO: Implement LinearQuadraticApprox before higher dimensions will work")
     end
-
-    sol = [z]
-    while sol[1] != 1
-        unshift!(sol, A[sol[1]])
-    end
-
-    runtime_elapsed = toq()
-    tot_elapsed = toq()
-
-    solution_metadata = {
-        "radius_multiplier" => rm,
-        "collision_checks" => collision_checks,
-        "elapsed" => runtime_elapsed,
-        "total_elapsed" => tot_elapsed,
-        "num_samples" => N,
-        "cost" => is_goal_pt(V[z], P.goal) ? C[z] : Inf,
-        "test_config" => P.config_name,
-        "planner" => "FMT",
-        "solved" => is_goal_pt(V[z], P.goal)
-    }
-
-    return solution_metadata, sol, NN, A
 end
+
+
+# TODO: old code relevant to approx opt implementation
+# function pairwise_distances_approx_opt{T}(V::Vector{Vector{T}}, SS::LinearQuadraticStateSpace, t_bound::Float64, res::Int64 = 10)
+#     N = length(V)
+#     V1 = hcat(V...)
+#     t = t_bound/2.
+#     V0bar = SS.expAt(t)*V1 .+ SS.cdrift(t)
+#     return (t + pairwise(SqMahalanobis(SS.Ginv(t)), V0bar, V1)), fill(t, N, N)
+# end

@@ -30,5 +30,6 @@ include("postprocessors.jl")
 include("plotting.jl")
 
 # TODO: test suite!
+# TODO: T<:FloatingPoint - either ensure type stability, or just go with Float64 everything
 
 end # module

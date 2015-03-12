@@ -36,10 +36,10 @@ function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, s
     if isdefined(P, :solution)
         S = P.solution
         if meta
-            haskey(S.metadata, "tree") && plot_tree(P.V.V, S.metadata["tree"], color="gray", alpha=0.5)
+            haskey(S.metadata, "tree") && plot_tree(P.SS, P.V, S.metadata["tree"], color="gray", alpha=0.5)
             # TODO: graph (PRM)
         end
-        sol && plot_path(P.V.V, S.metadata["path"], color="blue")
+        sol && plot_path(P.SS, P.V, S.metadata["path"], color="blue")
         smoothed && haskey(S.metadata, "smoothed_path") && plot_path(S.metadata["smoothed_path"], color="orange")
     end
 end
