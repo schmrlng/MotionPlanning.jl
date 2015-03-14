@@ -10,16 +10,16 @@ abstract LinearQuadratic{T<:FloatingPoint} <: QuasiMetric
 ## Optimal Steering
 type LinearQuadraticOpt{T} <: LinearQuadratic{T}
     steer::Function
-    tmax::T         # for potential pruning
+    cmax::T         # for potential pruning
 end
 LinearQuadraticOpt(cost::Function) = LinearQuadraticOpt(cost::Function, 1.)
-function LinearQuadraticOpt{T<:FloatingPoint}(cost::Function, cost_deriv::Function, tmax::T = 1.)
+function LinearQuadraticOpt{T<:FloatingPoint}(cost::Function, cost_deriv::Function, cmax::T = 1.)
     function topt(x0, x1, tm)
         # Bisection
         b = tm
         cost_deriv(x0, x1, b) < 0 && return tm
         a = .01
-        while cost_deriv(x0, x1, a) > 0; a /= 2; end
+        while cost_deriv(x0, x1, a) > 0; a /= 2.; end
         m = 0.
         for i in 1:10
             m = (a+b)/2
@@ -27,11 +27,11 @@ function LinearQuadraticOpt{T<:FloatingPoint}(cost::Function, cost_deriv::Functi
         end
         m
     end
-    function steer(x0, x1, tm)
-        t = topt(x0, x1, tm)
+    function steer(x0, x1, cm)
+        t = topt(x0, x1, cm)
         cost(x0, x1, t), FinalTime(t)
     end
-    LinearQuadraticOpt(steer, tmax)
+    LinearQuadraticOpt(steer, cmax)
 end
 ## TODO: Approximate(ly Optimal) Steering
 # type LinearQuadraticApprox{T<:FloatingPoint} <: LinearQuadratic
@@ -82,7 +82,7 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LinearQuadraticOpt{
     for j = 1 : N
         vj = view(VM,:,j)
         for i = 1 : N
-            @inbounds DS[i,j], US[i,j] = dist.steer(view(VM,:,i), vj, dist.tmax)
+            @inbounds DS[i,j], US[i,j] = dist.steer(view(VM,:,i), vj, dist.cmax)
         end
     end
     DS, US
@@ -97,7 +97,7 @@ function inbounds(v, SS::LinearQuadraticStateSpace)
 end
 is_free_state(v, CC::PointRobot2D, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(Vector2(v), CC)
 function is_free_motion(v, w, CC::PointRobot2D, SS::LinearQuadraticStateSpace)   # TODO: inputs V, i, j instead of v, w
-    t = (SS.dist.steer(v, w, SS.dist.tmax)[2]).t   # terrible, hmm
+    t = (SS.dist.steer(v, w, SS.dist.cmax)[2]).t   # terrible, hmm
     for s in linspace(0, t, 5)
         y = SS.x(v, w, t, s)
         !inbounds(y, SS) && return false

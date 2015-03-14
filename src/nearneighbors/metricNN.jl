@@ -41,28 +41,56 @@ type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: Me
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
     dist::Metric
-    US::Matrix{U}
 
     function EuclideanNN_KDTree(V::Vector{S}, dist::Metric = Euclidean())
         N = length(V)
         dist != Euclidean() && error("Distance metric must be Euclidean for EuclideanNN_KDTree")
-        new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), Euclidean(), Array(NullControl, 0, 0)) # TODO: leafsize, reorder?
+        new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), Euclidean()) # TODO: leafsize, reorder?
     end
 end
 EuclideanNN_KDTree{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
     EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
 
-function inball{S,T}(NN::EuclideanNN_KDTree{S,T}, v::Int, r)
-    inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN.V[v]), r, true)
+function inball{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
-    Neighborhood(inds, colwise(Euclidean(), NN.V[v], NN.v[inds]))
+    Neighborhood(inds, colwise(Euclidean(), NN[v], hcat(NN[inds]...)))
 end
 
-function knn{S,T}(NN::EuclideanNN_KDTree{S,T}, v::Int, k = 1)    # ds sorted increasing
-    inds, ds = KDTrees.knn(NN.DS, convert(Vector{T}, NN.V[v]), k+1)
+function knn{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, k = 1)    # ds sorted increasing
+    inds, ds = KDTrees.knn(NN.DS, convert(Vector{T}, NN[v]), k+1)
     shift!(inds)
     shift!(ds)
     Neighborhood(inds, ds)
+end
+
+### Arc length pruned KDTree
+type ArcLength_Pruned{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
+    V::Vector{S}
+    DS::KDTree
+    cache::Vector{Neighborhood{T}}
+    kNNr::Vector{T}
+    dist::Metric
+    US::SparseMatrixCSC{U,Int}
+
+    function ArcLength_Pruned(V::Vector{S}, dist::Metric = Euclidean())
+        N = length(V)
+        new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), dist, sparse([],[],U[],N,N)) # TODO: leafsize, reorder?
+    end
+end
+ArcLength_Pruned{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
+    ArcLength_Pruned{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+
+function inball{S,T,U}(NN::ArcLength_Pruned{S,T,U}, v::Int, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
+    inds = deleteat!(inds, searchsortedfirst(inds, v))
+    ds = T[evaluate(NN.dist, NN[v], NN[i]) for i in inds]
+    @devec pruned = ds .<= r
+    Neighborhood(inds[pruned], ds[pruned])
+end
+
+function knn{S,T,U}(NN::ArcLength_Pruned{S,T,U}, v::Int, k = 1)    # ds sorted increasing
+    error("NN datastructure ArcLength_Pruned does not support k-nearest neighbors. Try brute force?")
 end
 
 # type EuclideanNN_FLANN{S<:AbstractVector,T<:FloatingPoint} <: MetricNN

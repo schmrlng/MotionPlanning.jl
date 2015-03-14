@@ -4,6 +4,7 @@ using PyPlot
 using ArrayViews
 using Devectorize
 using Iterators
+using Grid
 # using HypothesisTests
 using Distances
 using KDTrees

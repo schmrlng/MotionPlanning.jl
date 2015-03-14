@@ -37,5 +37,5 @@ function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_b
     end
     ensure_goal && (W[N] = sample_free_goal(P))
     P.V = addpoints(P.V, W)
-    return 1. #ci(BinomialTest(successes, attempts), .05, tail = :left)[2] * volume(P.SS)
+    return volume(P.SS) #ci(BinomialTest(successes, attempts), .05, tail = :left)[2] * volume(P.SS)
 end
