@@ -1,4 +1,4 @@
-export EuclideanNN_KDTree, MetricNN_BruteForce
+export EuclideanNN_KDTree, MetricNN_BruteForce, ArcLength_Pruned
 
 ### Metric brute force
 type MetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
@@ -48,7 +48,7 @@ type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: Me
         new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), Euclidean()) # TODO: leafsize, reorder?
     end
 end
-EuclideanNN_KDTree{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
+EuclideanNN_KDTree{S<:AbstractVector}(V::Vector{S}, dist::Metric = Euclidean()) =
     EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
 
 function inball{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, r)
@@ -65,7 +65,7 @@ function knn{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, k = 1)    # ds sorted
 end
 
 ### Arc length pruned KDTree
-type ArcLength_Pruned{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
+type ArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     V::Vector{S}
     DS::KDTree
     cache::Vector{Neighborhood{T}}

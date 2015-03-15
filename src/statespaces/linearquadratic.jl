@@ -1,6 +1,6 @@
 export FinalTime, LinearQuadratic, LinearQuadraticOpt
 export LinearQuadraticStateSpace, DoubleIntegrator
-
+export waypoints
 
 ### Linear Quadratic Steering
 type FinalTime{T<:FloatingPoint} <: ControlInfo

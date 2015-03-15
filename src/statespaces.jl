@@ -19,3 +19,4 @@ plot_tree(SS::StateSpace, NN::NearNeighborCache, args...; kwargs...) = plot_tree
 
 include("statespaces/geometric.jl")
 include("statespaces/linearquadratic.jl")
+include("statespaces/reedsshepp.jl")
