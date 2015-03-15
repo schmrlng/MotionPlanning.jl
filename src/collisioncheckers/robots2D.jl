@@ -17,5 +17,6 @@ function is_free_path(path::Path, CC::PointRobot2D)
     true
 end
 inflate(CC::PointRobot2D, eps) = eps > 0 ? PointRobot2D(inflate(CC.obstacles, eps)) : CC
-plot(CC::PointRobot2D; kwargs...) = plot(CC.obstacles, color = "red", edgecolor = "none"; kwargs...)
+plot(CC::PointRobot2D, lo = zeros(2), hi = zeros(2); kwargs...) = plot(CC.obstacles, color = "red", edgecolor = "none",
+                                                                       xmin = lo[1], xmax = hi[1], ymin = lo[1], ymax = hi[1]; kwargs...)
 composable(CC::PointRobot2D, opts = (stroke("black"),)) = composable(CC.obstacles, opts)
