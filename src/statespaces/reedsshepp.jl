@@ -113,7 +113,7 @@ function waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, TP
     end
     push!(pts, w.x)
 end
-waypoints(i, j, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP) = waypoints(NN[i], NN[j], SS, TP)
+waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP) = waypoints(NN[i], NN[j], SS, TP)
 
 inbounds(v::RSState, SS::ReedsSheppStateSpace) = (SS.lo[1] < v.x[1] < SS.hi[1] && SS.lo[2] < v.x[2] < SS.hi[2])
 inbounds(v::AbstractVector, SS::ReedsSheppStateSpace) = (SS.lo[1] < v[1] < SS.hi[1] && SS.lo[2] < v[2] < SS.hi[2])

@@ -36,5 +36,7 @@ include("plotting.jl")
 # TODO: change up lazy vcat [.,.] syntax in anticipation of v0.4; also consider push!/append!
 # TODO: half-baked controls caching - do it or kill it
 # TODO: "prototype" (.h-ish) files to specify required methods; julia type system makes OOP a pain
+# TODO: FMT re-solving is wonky with different sample sizes 
+# TODO: Think about parameterizing MPProblem on the StateSpace type (for ease of postprocessing)
 
 end # module

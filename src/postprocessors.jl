@@ -1,4 +1,4 @@
-export shortcut, adaptive_shortcut, adaptive_shortcut!
+export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path
 
 ### ADAPTIVE-SHORTCUT (Hsu 2000)
 
@@ -58,4 +58,39 @@ function discretize_path(path::Path, dx)
         append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
     end
     dpath
+end
+
+### Reeds-Shepp fix inexact steering (okay not really) and discretize
+
+function smooth_waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, dx)
+    s.t == 0 && return Vector2{T}[v.x + a*Vector2(cos(v.t), sin(v.t)) for a in linspace(0, abs(s.d), iceil(abs(s.d)/dx)+1)]
+    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
+    turnpts = [r*Vector2(cos(x), sin(x)) for x in linspace(0, abs(s.d), iceil(r*abs(s.d)/dx)+1)]
+    if s.t*s.d < 0
+        for i in 1:length(turnpts)      # manual @devec
+            turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
+        end
+    end
+    [(center + sign(s.t)*MotionPlanning.rotate(p, v.t-pi/2)) for p in turnpts]
+end
+function smooth_waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, dx)
+    pts = Array(Vector2{T}, 0)
+    for s in SS.dist.paths[MotionPlanning.RSvec2sub(v, w, SS.dist)...]
+        s_pts = smooth_waypoints(v, s, SS.r, dx)
+        append!(pts, s_pts[1:end-1])
+        v = RSState(s_pts[end], v.t + s.t*s.d)
+    end
+    scale_factor = (w.x - pts[1]) ./ (v.x - pts[1])
+    pts = [(scale_factor.*(p - pts[1]) + pts[1]) for p in pts]
+    push!(pts, w.x)
+end
+smooth_waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, dx) = smooth_waypoints(NN[i], NN[j], SS, dx)
+
+function RSsmooth_and_discretize!(P::MPProblem, dx)
+    (!isa(P.SS, ReedsSheppStateSpace) || P.status != :solved) && error("RSsmooth_and_discretize only works for solved Reeds-Shepp problems!")
+    sol = P.solution.metadata["path"]
+    dpath = vcat([smooth_waypoints(sol[i], sol[i+1], P.V, P.SS, dx)[1:end-1] for i in 1:length(sol)-1]...)
+    push!(dpath, P.V[sol[end]].x)
+    dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
+    P.solution.metadata["smoothed_path"] = dpath
 end
