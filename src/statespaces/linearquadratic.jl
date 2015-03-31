@@ -1,43 +1,28 @@
-export FinalTime, LinearQuadratic, LinearQuadraticOpt
+export FinalTime, LinearQuadratic, LQOptSteering
 export LinearQuadraticStateSpace, DoubleIntegrator
 export waypoints
 
 ### Linear Quadratic Steering
+include("linearquadraticBVP.jl")
 type FinalTime{T<:FloatingPoint} <: ControlInfo
     t::T
 end
 abstract LinearQuadratic{T<:FloatingPoint} <: QuasiMetric
+controltype(d::LinearQuadratic) = FinalTime
+
 ## Optimal Steering
-type LinearQuadraticOpt{T} <: LinearQuadratic{T}
-    steer::Function
+type LQOptSteering{T} <: LinearQuadratic{T}
+    BVP::LinearQuadratic2BVP
     cmax::T         # for potential pruning
 end
-LinearQuadraticOpt(cost::Function) = LinearQuadraticOpt(cost::Function, 1.)
-function LinearQuadraticOpt{T<:FloatingPoint}(cost::Function, cost_deriv::Function, cmax::T = 1.)
-    function topt(x0, x1, tm)
-        # Bisection
-        b = tm
-        cost_deriv(x0, x1, b) < 0 && return tm
-        a = .01
-        while cost_deriv(x0, x1, a) > 0; a /= 2.; end
-        m = 0.
-        for i in 1:10
-            m = (a+b)/2
-            cost_deriv(x0, x1, m) > 0 ? b = m : a = m
-        end
-        m
-    end
-    function steer(x0, x1, cm)
-        t = topt(x0, x1, cm)
-        cost(x0, x1, t), FinalTime(t)
-    end
-    LinearQuadraticOpt(steer, cmax)
+function LQOptSteering(A::Matrix, B::Matrix, c::Vector, R::Matrix, cmax = 1.)
+    LQOptSteering(LinearQuadratic2BVP(A, B, c, R), cmax)
 end
+
 ## TODO: Approximate(ly Optimal) Steering
-# type LinearQuadraticApprox{T<:FloatingPoint} <: LinearQuadratic
+# type LQApproxSteering{T<:FloatingPoint} <: LinearQuadratic
 #
 # end
-controltype(d::LinearQuadratic) = FinalTime
 
 ### Linear Quadratic State Space
 immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
@@ -45,23 +30,17 @@ immutable LinearQuadraticStateSpace{T<:FloatingPoint} <: DifferentialStateSpace
     lo::Vector{T}
     hi::Vector{T}
     dist::LinearQuadratic{T}
-    x::Function
 
     A::Matrix{T}
     B::Matrix{T}
-    c::Vector{T}
+    c::Vector{T}   # drift
     R::Matrix{T}
+    C::Matrix{T}   # state -> workspace
 end
 ## Optimal Steering
 LinearQuadraticStateSpace(dim::Int, lo::Vector, hi::Vector,
-                          A::Matrix, B::Matrix, c::Vector, R::Matrix,
-                          cost::Function, cost_deriv::Function, x::Function) =
-    LinearQuadraticStateSpace(dim, lo, hi, LinearQuadraticOpt(cost, cost_deriv), x, A, B, c, R)
-## TODO: Approximate Steering
-# LinearQuadraticStateSpace(dim::Int, lo::Vector{T}, hi::Vector{T},
-#                           A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Matrix{T},
-#                           G::Function, Ginv::Function, expAt::Function, cdrift::Function) =
-#     LinearQuadraticStateSpace{T}(dim, lo, hi, A, B, c, R, G, Ginv, expAt, cdrift) # so constructor works without {}
+                          A::Matrix, B::Matrix, c::Vector, R::Matrix, C::Matrix) =
+    LinearQuadraticStateSpace(dim, lo, hi, LQOptSteering(A, B, c, R), A, B, c, R, C)
 
 vector_to_state{T}(v::AbstractVector{T}, SS::LinearQuadraticStateSpace) = v
 sample_space(SS::LinearQuadraticStateSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
@@ -74,7 +53,7 @@ function defaultNN(SS::LinearQuadraticStateSpace, init)
     QuasiMetricNN_BruteForce(V, SS.dist)
 end
 
-function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LinearQuadraticOpt{T}, V::Vector{S})
+function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S})
     N = length(V)
     VM = hcat(V...)
     DS = Array(T, N, N)
@@ -82,24 +61,26 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LinearQuadraticOpt{
     for j = 1 : N
         vj = view(VM,:,j)
         for i = 1 : N
-            @inbounds DS[i,j], US[i,j] = dist.steer(view(VM,:,i), vj, dist.cmax)
+            d, t = steer(dist.BVP, view(VM,:,i), vj, dist.cmax)
+            @inbounds DS[i,j], US[i,j] = d, FinalTime(t)
         end
     end
     DS, US
 end
 
-waypoints(i, j, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5) = [Vector2(SS.x(NN[i], NN[j], NN.US[i,j].t, s)) for s in linspace(0, NN.US[i,j].t, res)]
+waypoints(i, j, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5) =
+    [SS.C * SS.dist.BVP.x(NN[i], NN[j], NN.US[i,j].t, s) for s in linspace(0, NN.US[i,j].t, res)]
 function inbounds(v, SS::LinearQuadraticStateSpace)
     for i in 1:length(v)
         (SS.lo[i] > v[i] || v[i] > SS.hi[i]) && return false
     end
     true
 end
-is_free_state(v, CC::PointRobot2D, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(Vector2(v), CC)
+is_free_state(v, CC::PointRobot2D, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(SS.C * v, CC)
 function is_free_motion(v, w, CC::PointRobot2D, SS::LinearQuadraticStateSpace)   # TODO: inputs V, i, j instead of v, w
-    t = (SS.dist.steer(v, w, SS.dist.cmax)[2]).t   # terrible, hmm
+    t = steer(SS.dist.BVP, v, w, SS.dist.cmax)[2]   # terrible, hmm
     for s in linspace(0, t, 5)
-        y = SS.x(v, w, t, s)
+        y = SS.C * SS.dist.BVP.x(v, w, t, s)
         !inbounds(y, SS) && return false
         vy = Vector2(y)
         s > 0 && !is_free_motion(vx, vy, CC) && return false
@@ -130,35 +111,9 @@ function DoubleIntegrator(d::Int, lo = zeros(d), hi = ones(d); vmax = 1.5, r = 1
     B = [zeros(d,d); eye(d)]
     c = zeros(2d)
     R = r*eye(d)
-    G(t) = [(t^3/(3r))*eye(d) (t^2/(2r))*eye(d);
-            (t^2/(2r))*eye(d) (t/r)*eye(d)]
-    Ginv(t) = [(12r/t^3)*eye(d) (-6r/t^2)*eye(d);
-               (-6r/t^2)*eye(d) (4r/t)*eye(d)]
-    expAt(t) = [eye(d) t*eye(d); zeros(d,d) eye(d)]
-    cdrift(t) = zeros(2d)
+    C = [eye(d) zeros(d,d)]
 
-    if d == 2       # TODO: figure how to do this symbolically using Calculus.jl
-        dx(x0, x1, t) = (x1[1] - x0[1] - t*x0[3], x1[2] - x0[2] - t*x0[4], x1[3] - x0[3], x1[4] - x0[4])
-        function cost(x0, x1, t)
-            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
-            t + 12r/t^3*(dx1^2 + dx2^2) - 12r/t^2*(dx1*dx3 + dx2*dx4) + 4r/t*(dx3^2 + dx4^2)
-        end
-        function cost_deriv(x0, x1, t)
-            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
-            1. - 36r/t^4*(dx1^2 + dx2^2) - 12r/t^3*(2dx1*x0[3] + 2dx2*x0[4]) + 24r/t^3*(dx1*dx3 + dx2*dx4) + 12r/t^2*(x0[3]*dx3 + x0[4]*dx4) - 4r/t^2*(dx3^2 + dx4^2)
-        end
-        function x(x0, x1, t, s)
-            dx1, dx2, dx3, dx4 = dx(x0, x1, t)
-            m11, m12, m21, m22 = (-2s^3/t^3 + 3s^2/t^2, s^3/t^2 - s^2/t, -6s^2/t^3 + 6s/t^2, 3s^2/t^2 - 2s/t)
-            [x0[1] + s*x0[3] + m11*dx1 + m12*dx3,
-             x0[2] + s*x0[4] + m11*dx2 + m12*dx4,
-             x0[3] + m21*dx1 + m22*dx3,
-             x0[4] + m21*dx2 + m22*dx4]
-        end
-        return LinearQuadraticStateSpace(2d, [lo, -vmax*ones(d)], [hi, vmax*ones(d)], A, B, c, R, cost, cost_deriv, x)
-    else
-        error("TODO: Implement LinearQuadraticApprox before higher dimensions will work")
-    end
+    LinearQuadraticStateSpace(2d, [lo, -vmax*ones(d)], [hi, vmax*ones(d)], A, B, c, R, C)
 end
 
 
