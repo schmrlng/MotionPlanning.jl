@@ -234,6 +234,10 @@ function inflate(P::Polygon, eps)
 end
 inflate{T}(C::Compound2D{T}, eps) = Compound2D(Shape2D{T}[inflate(P, eps) for P in C.parts])
 
+# ---------- Closest Point ---------
+
+closest(p::Vector2, C::Circle) = C.c + C.r*unit(p - C.c)
+
 # ---------- Plotting ----------
 
 plot(C::Circle; kwargs...) = plot_circle(C.c, C.r; kwargs...)

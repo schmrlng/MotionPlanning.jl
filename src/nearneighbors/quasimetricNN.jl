@@ -5,25 +5,25 @@ abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and tri
 ### Quasimetric brute force
 type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
+    dist::QuasiMetric
     DS::Matrix{T}
+    US::Matrix{U}
     cacheF::Vector{Neighborhood{T}}
     cacheB::Vector{Neighborhood{T}}
     kNNrF::Vector{T}
     kNNrB::Vector{T}
-    dist::QuasiMetric
-    US::Matrix{U}
 
     function QuasiMetricNN_BruteForce(V::Vector{S}, dist::QuasiMetric)
-        N = length(V)
-        DS, US = pairwise_distances(dist, V)
-        new(V, DS, 
-            Array(Neighborhood{T}, N),
-            Array(Neighborhood{T}, N),
-            zeros(T, N),
-            zeros(T, N),
-            dist,
-            US)
+        NN = new(V, dist)
+        initcache(NN)
     end
+end
+function initcache{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U})
+    N = length(NN.V)
+    NN.DS, NN.US = pairwise_distances(NN.dist, NN.V)
+    NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
+    NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
+    NN
 end
 QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
     QuasiMetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}

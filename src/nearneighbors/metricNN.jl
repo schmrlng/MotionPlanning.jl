@@ -3,17 +3,22 @@ export EuclideanNN_KDTree, MetricNN_BruteForce, ArcLength_Pruned
 ### Metric brute force
 type MetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     V::Vector{S}
+    dist::Metric
     DS::Matrix{T}
+    US::Matrix{U}
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
-    dist::Metric
-    US::Matrix{U}
 
     function MetricNN_BruteForce(V::Vector{S}, dist::Metric = Euclidean())
-        N = length(V)
-        DS, US = pairwise_distances(dist, V)
-        new(V, DS, Array(Neighborhood{T}, N), zeros(T, N), dist, US)
+        NN = new(V, dist)
+        initcache(NN)
     end
+end
+function initcache{S,T,U}(NN::MetricNN_BruteForce{S,T,U})
+    N = length(NN.V)
+    NN.DS, NN.US = pairwise_distances(NN.dist, NN.V)
+    NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
+    NN
 end
 MetricNN_BruteForce{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
     MetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
@@ -37,16 +42,22 @@ end
 ### Euclidean k-d tree
 type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     V::Vector{S}
+    dist::Metric
     DS::KDTree
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
-    dist::Metric
 
     function EuclideanNN_KDTree(V::Vector{S}, dist::Metric = Euclidean())
-        N = length(V)
         dist != Euclidean() && error("Distance metric must be Euclidean for EuclideanNN_KDTree")
-        new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), Euclidean()) # TODO: leafsize, reorder?
+        NN = new(V, Euclidean())
+        initcache(NN)
     end
+end
+function initcache{S,T,U}(NN::EuclideanNN_KDTree{S,T,U})
+    N = length(NN.V)
+    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
+    NN
 end
 EuclideanNN_KDTree{S<:AbstractVector}(V::Vector{S}, dist::Metric = Euclidean()) =
     EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
@@ -67,16 +78,23 @@ end
 ### Arc length pruned KDTree
 type ArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     V::Vector{S}
+    dist::Metric
     DS::KDTree
+    US::SparseMatrixCSC{U,Int}
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
-    dist::Metric
-    US::SparseMatrixCSC{U,Int}
 
     function ArcLength_Pruned(V::Vector{S}, dist::Metric = Euclidean())
-        N = length(V)
-        new(V, KDTree(hcat(V...)), Array(Neighborhood{T}, N), zeros(T, N), dist, sparse([],[],U[],N,N)) # TODO: leafsize, reorder?
+        NN = new(V, dist)
+        initcache(NN)
     end
+end
+function initcache{S,T,U}(NN::ArcLength_Pruned{S,T,U})
+    N = length(NN.V)
+    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    NN.US = sparse([],[],U[],N,N)
+    NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
+    NN
 end
 ArcLength_Pruned{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
     ArcLength_Pruned{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
