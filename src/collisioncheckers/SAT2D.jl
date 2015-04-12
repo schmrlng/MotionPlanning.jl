@@ -1,9 +1,14 @@
 export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_ends_free
 
-import Base.atan2
+import Base.atan2, Base.full, Base.inv
 
 # ---------- Vector Utilities ----------
 
+full(v::Vector2) = convert(Vector{eltype(v)}, v)
+function inv{T}(M::Matrix2x2{T})
+    d = M[1,1]*M[2,2] - M[1,2]*M[2,1]
+    Matrix2x2(Vector2(M[2,2]/d, -M[2,1]/d), Vector2(-M[1,2]/d, M[1,1]/d))
+end
 norm2{T<:FloatingPoint}(v::Vector2{T}) = dot(v,v)
 perp{T<:FloatingPoint}(v::Vector2{T}) = Vector2{T}(v[2],-v[1])
 project{T<:FloatingPoint}(v1::Vector2{T}, v2::Vector2{T}) = (dot(v1,v2) / norm2(v2)) * v2
@@ -237,6 +242,52 @@ inflate{T}(C::Compound2D{T}, eps) = Compound2D(Shape2D{T}[inflate(P, eps) for P 
 # ---------- Closest Point ---------
 
 closest(p::Vector2, C::Circle) = C.c + C.r*unit(p - C.c)
+closest(p::Vector2, C::Circle, W::AbstractMatrix) = closest(p, C, eigfact(full(W)))
+function closest(p::Vector2, C::Circle, EF::Base.Eigen)
+    ctop = p - C.c
+    v1 = Vector2(EF.vectors[:,1])
+    v2 = Vector2(EF.vectors[:,2])
+    p1 = dot(v1, ctop)
+    p2 = dot(v2, ctop)
+    s1, s2 = EF.values
+    lambda = 1.
+    f = (p1*s1/(lambda+s1))^2 + (p2*s2/(lambda+s2))^2 - C.r^2
+    while abs(f) > 1e-8
+        fp = -2/(lambda+s1)*(p1*s1/(lambda+s1))^2 + -2/(lambda+s2)*(p2*s2/(lambda+s2))^2
+        alpha = 1.
+        lambdanew = 1.
+        fnew = 1.
+        while true      # crappy linesearch
+            lambdanew = lambda - alpha*f/fp
+            fnew = (p1*s1/(lambdanew+s1))^2 + (p2*s2/(lambdanew+s2))^2 - C.r^2
+            abs(fnew) < abs(f) && break
+            alpha /= 2.
+        end
+        f = fnew
+        lambda = lambdanew
+    end
+    v1*p1*s1/(lambda+s1) + v2*p2*s2/(lambda+s2)
+end
+closest(p::Vector2, P::Polygon) = closest(p::Vector2, P.points)
+function closest(p::Vector2, points::Vector)
+    N = length(points)
+    d2min = Inf
+    vmin = points[1]
+    for i in 1:N
+        edge = points[wrap1(i+1,N)] - points[i]
+        x = dot(edge, p - points[i]) / norm2(edge)
+        vcand = (x < 0 ? points[i] : (x < 1 ? points[i] + x*edge : points[wrap1(i+1,N)]))
+        d2new = norm2(p - vcand)
+        if d2new < d2min
+            d2min, vmin = d2new, vcand
+        end
+    end
+    vmin
+end
+function closest(p::Vector2, P::Polygon, W::AbstractMatrix)
+    L = Matrix2x2(chol(W))
+    inv(L)*closest(L*p, eltype(P.points)[L*pt for pt in P.points])
+end
 
 # ---------- Plotting ----------
 
