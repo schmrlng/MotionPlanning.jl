@@ -1,4 +1,4 @@
-export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_ends_free
+export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_ends_free, closest, close
 
 import Base.atan2, Base.full, Base.inv
 
@@ -126,6 +126,8 @@ function Compound2D{T}(parts::Vector{Shape2D{T}})    # TODO: allow Vectors of Sh
     Compound2D{T}(parts, xrange, yrange)
 end
 
+typealias Basic2D{T} Union(Circle{T}, Polygon{T})
+
 # type AABB{T} <: Shape2D{T}  # a bit late to the party; could refactor other Shapes
 #     xrange::Vector2{T}
 #     yrange::Vector2{T}
@@ -211,9 +213,6 @@ function colliding_ends_free(L::Line, C::Circle)
     d2*C.r^2 < cross(L.edge, vc)^2 && return false
     0 <= dot(vc, L.edge) <= d2
 end
-colliding(L::Line, C::Circle) = colliding_ends_free(L,C) || colliding(L.v,C) || colliding(L.w,C)
-colliding_ends_free(C::Circle, L::Line) = colliding_ends_free(L,C) 
-colliding(C::Circle, L::Line) = colliding(L,C)
 function colliding_ends_free(L::Line, P::Polygon)
     AABBseparated(L,P) && return false
     is_separating_axis(L,P) && return false
@@ -222,9 +221,9 @@ function colliding_ends_free(L::Line, P::Polygon)
     end
     true
 end
-colliding(L::Line, P::Polygon) = colliding_ends_free(L, P)
-colliding_ends_free(P::Polygon, L::Line) = colliding_ends_free(L,P) 
-colliding(P::Polygon, L::Line) = colliding(L,P)
+colliding_ends_free(B::Basic2D, L::Line) = colliding_ends_free(L,B) 
+colliding(L::Line, B::Basic2D) = colliding_ends_free(L,B) || colliding(L.v,B) || colliding(L.w,B)
+colliding(B::Basic2D, L::Line) = colliding(L,B)
 
 # ---------- Transformations ----------
 
@@ -241,7 +240,10 @@ inflate{T}(C::Compound2D{T}, eps) = Compound2D(Shape2D{T}[inflate(P, eps) for P 
 
 # ---------- Closest Point ---------
 
-closest(p::Vector2, C::Circle) = C.c + C.r*unit(p - C.c)
+function closest(p::Vector2, C::Circle)
+    xmin = C.c + C.r*unit(p - C.c)
+    norm2(p-xmin), xmin
+end
 closest(p::Vector2, C::Circle, W::AbstractMatrix) = closest(p, C, eigfact(full(W)))
 function closest(p::Vector2, C::Circle, EF::Base.Eigen)
     ctop = p - C.c
@@ -266,28 +268,55 @@ function closest(p::Vector2, C::Circle, EF::Base.Eigen)
         f = fnew
         lambda = lambdanew
     end
-    v1*p1*s1/(lambda+s1) + v2*p2*s2/(lambda+s2)
+    xmin = C.c + v1*p1*s1/(lambda+s1) + v2*p2*s2/(lambda+s2)
+    s1*(p1-p1*s1/(lambda+s1))^2 + s2*(p2-p2*s2/(lambda+s2))^2, xmin
 end
 closest(p::Vector2, P::Polygon) = closest(p::Vector2, P.points)
 function closest(p::Vector2, points::Vector)
     N = length(points)
-    d2min = Inf
-    vmin = points[1]
+    d2min, vmin = Inf, points[1]
     for i in 1:N
         edge = points[wrap1(i+1,N)] - points[i]
         x = dot(edge, p - points[i]) / norm2(edge)
-        vcand = (x < 0 ? points[i] : (x < 1 ? points[i] + x*edge : points[wrap1(i+1,N)]))
-        d2new = norm2(p - vcand)
-        if d2new < d2min
-            d2min, vmin = d2new, vcand
+        v = (x < 0 ? points[i] : (x < 1 ? points[i] + x*edge : points[wrap1(i+1,N)]))
+        d2 = norm2(p - v)
+        if d2 < d2min
+            d2min, vmin = d2, v
         end
     end
-    vmin
+    d2min, vmin
 end
 function closest(p::Vector2, P::Polygon, W::AbstractMatrix)
     L = Matrix2x2(chol(W))
-    inv(L)*closest(L*p, eltype(P.points)[L*pt for pt in P.points])
+    xmin = inv(L)*closest(L*p, eltype(P.points)[L*pt for pt in P.points])[2]
+    dot(xmin-p, Matrix2x2(W)*(xmin-p)), xmin
 end
+function closest(p::Vector2, C::Compound2D)
+    d2min, vmin = Inf, p
+    for P in C.parts
+        d2, v = closest(p, P)
+        if d2 < d2min
+            d2min, vmin = d2, v
+        end
+    end
+    d2min, vmin
+end
+function closest(p::Vector2, C::Compound2D, W::AbstractMatrix)  # refactor/combine with above... someday
+    d2min, vmin = Inf, p
+    for P in C.parts
+        d2, v = closest(p, P, W)
+        if d2 < d2min
+            d2min, vmin = d2, v
+        end
+    end
+    d2min, vmin
+end
+
+function close(p::Vector2, P::Basic2D, W::AbstractMatrix, r2)  # pretty janky
+    cplist = [closest(p, P, W)]
+    cplist[1][1] < r2 ? cplist[1:1] : cplist[1:0]
+end
+close(p::Vector2, C::Compound2D, W::AbstractMatrix, r2) = vcat([close(p, P, W, r2) for P in C.parts]...)
 
 # ---------- Plotting ----------
 
