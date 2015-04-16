@@ -113,8 +113,6 @@ end
 Line{T}(v::Vector2{T}, w::Vector2{T}) = Line{T}(v,w)   # so Line(v,w) works without {T}
 projectNextrema{T}(L::Line{T}, n::Vector2{T}) = minmaxV(dot(L.v,n), dot(L.w,n))
 
-typealias PolyOrLine{T} Union(Polygon{T}, Line{T})
-
 type Compound2D{T} <: Shape2D{T}
     parts::Vector{Shape2D{T}}
     xrange::Vector2{T}
@@ -126,7 +124,8 @@ function Compound2D{T}(parts::Vector{Shape2D{T}})    # TODO: allow Vectors of Sh
     Compound2D{T}(parts, xrange, yrange)
 end
 
-typealias Basic2D{T} Union(Circle{T}, Polygon{T})
+typealias PolyOrLine{T} Union(Polygon{T}, Line{T})
+typealias Basic2D{T} Union(Circle{T}, Polygon{T})    # TODO: Figure out why I have Shape2D, PolyOrLine, and Basic2D
 
 # type AABB{T} <: Shape2D{T}  # a bit late to the party; could refactor other Shapes
 #     xrange::Vector2{T}
@@ -204,7 +203,6 @@ function colliding(C::Compound2D, S::Shape2D)
 end
 colliding(S::Circle, C::Compound2D) = colliding(C,S)   # colliding(S::Shape2D, C::Compound2D) is type-ambiguous?
 colliding(S::Polygon, C::Compound2D) = colliding(C,S)
-colliding(S::Line, C::Compound2D) = colliding(C,S)
 ## Swept collisions
 function colliding_ends_free(L::Line, C::Circle)
     AABBseparated(L,C) && return false
@@ -224,6 +222,9 @@ end
 colliding_ends_free(B::Basic2D, L::Line) = colliding_ends_free(L,B) 
 colliding(L::Line, B::Basic2D) = colliding_ends_free(L,B) || colliding(L.v,B) || colliding(L.w,B)
 colliding(B::Basic2D, L::Line) = colliding(L,B)
+colliding(S::Line, C::Compound2D) = colliding(C,S)
+colliding_ends_free(S::Line, C::Compound2D) = colliding(C,S)
+colliding_ends_free(C::Compound2D, S::Line) = colliding(C,S)
 
 # ---------- Transformations ----------
 
@@ -316,7 +317,7 @@ function close(p::Vector2, P::Basic2D, W::AbstractMatrix, r2)  # pretty janky
     cplist = [closest(p, P, W)]
     cplist[1][1] < r2 ? cplist[1:1] : cplist[1:0]
 end
-close(p::Vector2, C::Compound2D, W::AbstractMatrix, r2) = vcat([close(p, P, W, r2) for P in C.parts]...)
+close(p::Vector2, C::Compound2D, W::AbstractMatrix, r2) = sort(vcat([close(p, P, W, r2) for P in C.parts]...), by=first)
 
 # ---------- Plotting ----------
 

@@ -21,7 +21,7 @@ function Sym2Function(s::Vector{SymPy.Sym}, args::Union(Symbol, Expr) = :t, repl
     @eval @anon $args -> $(parse(vliteral))
 end
 function Sym2Function(s::Matrix{SymPy.Sym}, args::Union(Symbol, Expr) = :t, replace_rule = ())
-    mliteral = "[" * join(mapslices(row -> join(row, " "), map(x -> string(SymPy.simplify(SymPy.expand(x))), s), 2), "; ") * "]"
+    mliteral = "[" * join(mapslices(rw -> join(rw, " "), map(x -> string(SymPy.simplify(SymPy.expand(x))), s), 2), "; ") * "]"
     length(replace_rule) > 0 && (mliteral = replace(mliteral, replace_rule...))
     @eval @anon $args -> $(parse(mliteral))
 end

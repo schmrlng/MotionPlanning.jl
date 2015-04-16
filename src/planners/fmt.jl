@@ -67,6 +67,8 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         "tree" => A,
         "path" => sol
     }
+    connections == :R && (solution_metadata["r"] = r)
+    connections == :K && (solution_metadata["k"] = k)
     P.solution = MPSolution(P.status, C[z], toq(), solution_metadata)
     C[z]
 end

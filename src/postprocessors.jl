@@ -49,15 +49,18 @@ end
 
 ### Path discretization (Euclidean)
 
-function discretize_path(path::Path, dx)
-    path = path[[true, map(norm, diff(path)) .> dx / 4]] # cut out tiny waypoint steps
+function discretize_path(path0::Path, dx)
+    path = path0[1:1]
+    for i in 2:length(path0)
+         norm(path0[i] - path[end]) > dx/4 && push!(path, path0[i])
+    end
     dpath = path[1:1]
     for i in 2:length(path)
         segment_length = norm(path[i] - path[i-1])
         M = ceil(segment_length / dx)
         append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
     end
-    dpath
+    map(full, dpath)
 end
 
 ### Reeds-Shepp fix inexact steering (okay not really) and discretize
@@ -93,4 +96,28 @@ function RSsmooth_and_discretize!(P::MPProblem, dx)
     push!(dpath, P.V[sol[end]].x)
     dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
     P.solution.metadata["smoothed_path"] = dpath
+end
+
+### Linear Quadratic Discretization
+
+function discretize_path(pidx, dt, NN::NearNeighborCache, SS::LinearQuadraticStateSpace)
+    dpath = NN.V[[pidx[1]]]
+    for i in 2:length(pidx)
+        segment_length = NN.TT[pidx[i-1],pidx[i]]
+        M = iceil(segment_length / dt) + 1
+        wps = waypoints(pidx[i-1], pidx[i], NN, SS, M)
+        append!(dpath, Vector{Float64}[wps[:,c] for c in 2:size(wps,2)])
+    end
+    dpath
+end
+
+### General (should perhaps not live in this package?)
+
+function discretize_path(P::MPProblem, dt)
+    if P.SS.dist == Euclidean()
+        adaptive_shortcut!(P)
+        P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["smoothed_path"], dt)
+        return P.solution.metadata["discretized_path"]   # TODO: get method for MPSolution type
+    end
+    P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.NN, P.SS)
 end

@@ -1,4 +1,4 @@
-export plot, plot_rectangle, plot_circle, plot_ellipse, plot_bounds, plot_graph, plot_tree, plot_path
+export plot, plot_rectangle, plot_circle, plot_ellipse, plot_bounds, plot_graph, plot_tree, plot_path, plot_line_segments
 
 rectangle_corners(lo, hi) = ([lo[1],hi[1],hi[1],lo[1],lo[1]], [lo[2],lo[2],hi[2],hi[2],lo[2]])
 
@@ -54,6 +54,12 @@ function plot_tree(V::Matrix, A; kwargs...)
     plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
 plot_tree(V::Vector, A; kwargs...) = plot_tree(hcat(V...), A; kwargs...)
+
+function plot_line_segments(P1::Vector, P2::Vector; kwargs...)
+    X = [[v[1] for v in P1]'; [v[1] for v in P2]'; fill(nothing, 1, length(P1))][:]
+    Y = [[v[2] for v in P1]'; [v[2] for v in P2]'; fill(nothing, 1, length(P1))][:]
+    plt.plot(X, Y; kwargs...)
+end
 
 function plot_path(V::Matrix, idx_list = 1:size(V,2); kwargs...)
     plt.plot(V[1,idx_list]', V[2,idx_list]', linewidth=1.0, linestyle="-", zorder=2; kwargs...)
