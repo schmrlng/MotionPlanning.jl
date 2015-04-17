@@ -102,7 +102,8 @@ ArcLength_Pruned{S<:State}(V::Vector{S}, dist::Metric = Euclidean()) =
 function inball{S,T,U}(NN::ArcLength_Pruned{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
-    ds = T[evaluate(NN.dist, NN[v], NN[i]) for i in inds]
+    ds = T[v < i ? evaluate(NN.dist, NN[v], NN[i]) : evaluate(NN.dist, NN[i], NN[v])   # in case metric evaluation isn't quite symmetric (e.g. interpolated)
+           for i in inds]
     @devec pruned = ds .<= r
     Neighborhood(inds[pruned], ds[pruned])
 end
