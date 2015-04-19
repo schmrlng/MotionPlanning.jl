@@ -1,6 +1,6 @@
 export FinalTime, LinearQuadratic, LQOptSteering
 export LinearQuadraticStateSpace, DoubleIntegrator
-export waypoints
+export waypoints, statepoints
 
 ### Linear Quadratic Steering
 include("linearquadraticBVP.jl")
@@ -45,7 +45,7 @@ LinearQuadraticStateSpace(dim::Int, lo::Vector, hi::Vector,
 vector_to_state{T}(v::AbstractVector{T}, SS::LinearQuadraticStateSpace) = v
 sample_space(SS::LinearQuadraticStateSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
 function volume(SS::LinearQuadraticStateSpace)
-    warn("TODO: what is volume for a LinearQuadraticStateSpace?")
+    # warn("TODO: what is volume for a LinearQuadraticStateSpace?")
     prod(SS.hi-SS.lo)
 end
 function defaultNN(SS::LinearQuadraticStateSpace, init)
@@ -70,6 +70,8 @@ end
 
 waypoints(i, j, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5) =
     [SS.C * SS.dist.BVP.x(NN[i], NN[j], NN.US[i,j].t, s) for s in linspace(0, NN.US[i,j].t, res)]
+statepoints(i, j, NN::QuasiMetricNN, SS::LinearQuadraticStateSpace, res=5) =
+    [SS.dist.BVP.x(NN[i], NN[j], NN.US[i,j].t, s) for s in linspace(0, NN.US[i,j].t, res)]
 function inbounds(v, SS::LinearQuadraticStateSpace)
     for i in 1:length(v)
         (SS.lo[i] > v[i] || v[i] > SS.hi[i]) && return false

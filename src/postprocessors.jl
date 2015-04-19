@@ -103,10 +103,10 @@ end
 function discretize_path(pidx, dt, NN::NearNeighborCache, SS::LinearQuadraticStateSpace)
     dpath = NN.V[[pidx[1]]]
     for i in 2:length(pidx)
-        segment_length = NN.TT[pidx[i-1],pidx[i]]
+        segment_length = NN.US[pidx[i-1],pidx[i]].t
         M = iceil(segment_length / dt) + 1
-        wps = waypoints(pidx[i-1], pidx[i], NN, SS, M)
-        append!(dpath, Vector{Float64}[wps[:,c] for c in 2:size(wps,2)])
+        wps = statepoints(pidx[i-1], pidx[i], NN, SS, M)
+        append!(dpath, wps[2:end])
     end
     dpath
 end
@@ -119,5 +119,5 @@ function discretize_path(P::MPProblem, dt)
         P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["smoothed_path"], dt)
         return P.solution.metadata["discretized_path"]   # TODO: get method for MPSolution type
     end
-    P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.NN, P.SS)
+    P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.V, P.SS)
 end

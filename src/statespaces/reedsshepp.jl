@@ -71,7 +71,7 @@ ReedsSheppStateSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) = Re
 vector_to_state{T}(v::AbstractVector{T}, SS::ReedsSheppStateSpace{T}) = RSState(Vector2(v), zero(T))   # Required for goal sampling TODO: RSGoal?
 sample_space{T}(SS::ReedsSheppStateSpace{T}) = RSState(SS.lo + Vector2{T}(rand(T), rand(T)).*(SS.hi-SS.lo), convert(T, 2pi*rand(T)))   # TODO: @devec
 function volume(SS::ReedsSheppStateSpace)
-    warn("TODO: what is volume for a ReedsSheppStateSpace?")
+    # warn("TODO: what is volume for a ReedsSheppStateSpace?")
     2pi*prod(SS.hi-SS.lo)
 end
 function defaultNN(SS::ReedsSheppStateSpace, init)
