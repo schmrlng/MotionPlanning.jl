@@ -27,6 +27,6 @@ function close{T}(p::AbstractVector{T}, CC::PointRobot2D, W::AbstractMatrix, r2)
     cps = close(Vector2(p), CC.obstacles, W, r2)
     (T, Vector{T})[(d2, full(v)) for (d2, v) in cps]
 end
-plot(CC::PointRobot2D, lo = zeros(2), hi = zeros(2); kwargs...) = plot(CC.obstacles, color = "red", edgecolor = "none",
-                                                                       xmin = lo[1], xmax = hi[1], ymin = lo[1], ymax = hi[1]; kwargs...)
+plot(CC::PointRobot2D, lo = zeros(2), hi = ones(2); kwargs...) = plot(CC.obstacles, color = "red", edgecolor = "none",
+                                                                      xmin = lo[1], xmax = hi[1], ymin = lo[2], ymax = hi[2]; kwargs...)
 composable(CC::PointRobot2D, opts = (stroke("black"),)) = composable(CC.obstacles, opts)

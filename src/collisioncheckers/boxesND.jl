@@ -1,75 +1,59 @@
-### Obstacle Types
+export PointRobotNDBoxes
 
-abstract ObstacleSet
-
-immutable ObstacleList <: ObstacleSet
-    list::Vector{ObstacleSet}
-end
+# ---------- Point Robot (amongst N-d boxes) ----------
 
 typealias Matrix3D{T} Array{T,3}
-immutable AABoxes <: ObstacleSet
+type PointRobotNDBoxes <: SweptCollisionChecker
     boxes::Matrix3D
+    count::Int
 end
+PointRobotNDBoxes(boxes::Matrix3D) = PointRobotNDBoxes(boxes, 0)
+PointRobotNDBoxes(box_hcat::Matrix) = PointRobotNDBoxes(reshape(box_hcat, size(box_hcat, 1), 2, div(size(box_hcat, 2), 2)))
+PointRobotNDBoxes{T}(box_list::Vector{Matrix{T}}) = PointRobotNDBoxes(hcat(box_list...))
 
-AABoxes(box_hcat::Matrix) = AABoxes(reshape(box_hcat, size(box_hcat, 1), 2, div(size(box_hcat, 2), 2)))
-AABoxes{T}(box_list::Vector{Matrix{T}}) = AABoxes(hcat(box_list...))
-volume(obs::ObstacleSet) = volume_naive(obs)
+is_free_state(v::AbstractVector, CC::PointRobotNDBoxes) = is_free_state(v, CC.boxes)
+is_free_motion(v::AbstractVector, w::AbstractVector, CC::PointRobotNDBoxes) = is_free_motion(v, w, CC.boxes)
+is_free_path(path::Path, CC::PointRobotNDBoxes) = is_free_path(path, CC.boxes)
 
-### ObstacleList
+inflate(CC::PointRobotNDBoxes, eps) = eps > 0 ? PointRobotNDBoxes(CC.boxes .+ [-eps eps]) : CC  # TODO: rounded corners/edges
+closest(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix) = closest(p, CC.boxes, W)
+close(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix, r2) = close(p, CC.boxes, W, r2)
 
-is_free_state(v::Vector, obs_list::ObstacleList) = all([is_free_state(v, obs) for obs in obs_list.list])
-is_free_motion(v::Vector, w::Vector, obs_list::ObstacleList) = all([is_free_motion(v, w, obs) for obs in obs_list.list])
-is_free_path{T}(path::Vector{Vector{T}}, obs_list::ObstacleList) = all([is_free_path(path, obs) for obs in obs_list.list])
-closest_obs_pt(v::Vector, obs_list::ObstacleList) = mapreduce(obs -> closest_obs_pt(v, obs), (x,y) -> (x[1] < y[1] ? x : y), obs_list.list)
-volume_naive(obs_list::ObstacleList) = sum([volume_naive(obs) for obs in obs_list.list])
-plot_obstacles(obs_list::ObstacleList) = [plot_obstacles(obs) for obs in obs_list.list]
+plot(CC::PointRobotNDBoxes, lo = zeros(2), hi = ones(2); kwargs...) =
+    mapslices(o -> plot_rectangle(o, color = "red", edgecolor = "none"; kwargs...), CC.boxes, [1,2])
 
-### AABoxes
+### Point/box obstacle checking in R^n (side note: SAT-style might be faster)
+# TODO: devectorized @all/@any or something of the sort
 
-is_free_state(v::Vector, obs::AABoxes) = is_free_state(v, obs.boxes)
-is_free_motion(v::Vector, w::Vector, obs::AABoxes) = is_free_motion(v, w, obs.boxes)
-is_free_path{T}(path::Vector{Vector{T}}, obs::AABoxes) = is_free_path(path, obs.boxes)
-closest_obs_pt(v::Vector, obs::AABoxes) = closest_obs_pt(v, obs.boxes)
-volume_naive(obs::AABoxes) = sum(mapslices(prod, obs.boxes[:,2,:] - obs.boxes[:,1,:], [1,2]))
-plot_obstacles(obs::AABoxes) = mapslices(o -> plot_rectangle(o, color = "red"), obs.boxes, [1,2])
-
-### Point/box obstacle checking in R^n
-
-function is_free_state(v::Vector, o::AbstractMatrix)
+function is_free_state(v::AbstractVector, o::AbstractMatrix)
     for i = 1:size(o,1)
-        if !(o[i,1] <= v[i] <= o[i,2])
-            return true
-        end
+        !(o[i,1] <= v[i] <= o[i,2]) && return true
     end
     return false
 end
 
-function is_free_state(v::Vector, obs::Matrix3D)
+function is_free_state(v::AbstractVector, obs::Matrix3D)
     for k = 1:size(obs,3)
         !is_free_state(v, view(obs,:,:,k)) && return false
     end
     return true
 end
 
-function is_free_motion_broadphase(bb_min::Vector, bb_max::Vector, obs::Matrix3D, k::Int)
+function is_free_motion_broadphase(bb_min::AbstractVector, bb_max::AbstractVector, obs::Matrix3D, k::Int)
     for i = 1:size(obs,1)
-        if obs[i,2,k] < bb_min[i] || obs[i,1,k] > bb_max[i]
-            return true
-        end
+        (obs[i,2,k] < bb_min[i] || obs[i,1,k] > bb_max[i]) && return true
     end
     return false
 end
 
-function face_contains_projection(v::Vector, v_to_w::Vector, lambda::Number, j::Int, o::AbstractMatrix)
+function face_contains_projection(v::AbstractVector, v_to_w::AbstractVector, lambda::Number, j::Int, o::AbstractMatrix)
     for i = 1:size(o,1)
-        if i != j && !(o[i,1] <= v[i] + v_to_w[i]*lambda <= o[i,2])
-            return false
-        end
+        (i != j && !(o[i,1] <= v[i] + v_to_w[i]*lambda <= o[i,2])) && return false
     end
     return true
 end
 
-function is_free_motion(v::Vector, w::Vector, o::AbstractMatrix)
+function is_free_motion(v::AbstractVector, w::AbstractVector, o::AbstractMatrix)
     v_to_w = w - v
     @devec lambdas = (blend(v .< o[:,1], o[:,1], o[:,2]) .- v) ./ v_to_w
     for i in 1:size(o,1)
@@ -78,44 +62,41 @@ function is_free_motion(v::Vector, w::Vector, o::AbstractMatrix)
     return true
 end
 
-function is_free_motion(v::Vector, w::Vector, obs::Matrix3D)
+function is_free_motion(v::AbstractVector, w::AbstractVector, obs::Matrix3D)
     bb_min = min(v,w)
     bb_max = max(v,w)
     for k = 1:size(obs,3)
-        if !is_free_motion_broadphase(bb_min, bb_max, obs, k)
-            if !is_free_motion(v, w, view(obs,:,:,k))
-                return false
-            end
-        end
+        !is_free_motion_broadphase(bb_min, bb_max, obs, k) && !is_free_motion(v, w, view(obs,:,:,k)) && return false
     end
     return true
 end
 
-
-function is_free_path_naive{T}(path::Vector{Vector{T}}, obs::Matrix3D)
+function is_free_path(path::Path, obs::Matrix3D)
     for i in 1:length(path)-1
-        if !is_free_motion(path[i], path[i+1], obs)
-            return false
-        end
+        !is_free_motion(path[i], path[i+1], obs) && return false
     end
     return true
 end
-is_free_path{T}(path::Vector{Vector{T}}, obs::Matrix3D) = is_free_path_naive(path, obs)
 
-function closest_obs_pt(v::Vector, o::AbstractMatrix)
-    x = [clamp(v[i], o[i,1], o[i,2]) for i in 1:length(v)]
-    return (norm(x-v), x)
+function closest(p::AbstractVector, o::AbstractMatrix, W::AbstractMatrix)
+    v = Variable(length(p))
+    problem = minimize(quad_form(v-p, W), view(o,:,1) <= v, v <= view(o,:,2))
+    solve!(problem, ECOS.ECOSSolver(verbose=false))
+    return (problem.optval, vec(v.value))
 end
 
-function closest_obs_pt(v::Vector, obs::Matrix3D)
-    min_d = Inf
-    min_x = v
+function closest(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix)
+    d2min, vmin = Inf, p
     for k = 1:size(obs,3)
-        (d, x) = closest_obs_pt(v, view(obs,:,:,k))
-        if d < min_d
-            min_d = d
-            min_x = x
+        (d2, v) = closest(p, view(obs,:,:,k), W)
+        if d2 < d2min
+            d2min, vmin = d2, v
         end
     end
-    return (min_d, min_x)
+    d2min, vmin
+end
+
+function close(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix, r2)
+    cps = [closest(p, view(obs,:,:,k), W) for k in 1:size(obs,3)]
+    sort!(cps[[c[1] for c in cps] .< r2], by=first)
 end

@@ -317,7 +317,7 @@ function close(p::Vector2, P::Basic2D, W::AbstractMatrix, r2)  # pretty janky
     cplist = [closest(p, P, W)]
     cplist[1][1] < r2 ? cplist[1:1] : cplist[1:0]
 end
-close(p::Vector2, C::Compound2D, W::AbstractMatrix, r2) = sort(vcat([close(p, P, W, r2) for P in C.parts]...), by=first)
+close(p::Vector2, C::Compound2D, W::AbstractMatrix, r2) = sort!(vcat([close(p, P, W, r2) for P in C.parts]...), by=first)
 
 # ---------- Plotting ----------
 

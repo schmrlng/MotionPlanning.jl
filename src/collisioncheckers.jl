@@ -7,3 +7,4 @@ abstract SweptCollisionChecker <: CollisionChecker
 
 include("collisioncheckers/SAT2D.jl")
 include("collisioncheckers/robots2D.jl")
+include("collisioncheckers/boxesND.jl")

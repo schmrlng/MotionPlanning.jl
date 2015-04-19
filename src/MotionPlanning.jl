@@ -11,6 +11,8 @@ using Distances
 using KDTrees
 # using Graphs
 using ImmutableArrays
+using Convex
+using ECOS
 
 ### Planning Primitives
 export AbstractState, State, Path

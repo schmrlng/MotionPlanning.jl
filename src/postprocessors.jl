@@ -52,7 +52,7 @@ end
 function discretize_path(path0::Path, dx)
     path = path0[1:1]
     for i in 2:length(path0)
-         norm(path0[i] - path[end]) > dx/4 && push!(path, path0[i])
+         norm(path0[i] - path[end]) > 2dx/3 && push!(path, path0[i])  # cut out small waypoint steps
     end
     dpath = path[1:1]
     for i in 2:length(path)
