@@ -1,4 +1,4 @@
-export plot, plot_rectangle, plot_circle, plot_ellipse, plot_bounds, plot_graph, plot_tree, plot_path, plot_line_segments
+export plot, plot_rectangle, plot_circle, plot_ellipse, plot_bounds, plot_graph, plot_tree, plot_path, plot_line_segments, save_plot
 
 rectangle_corners(lo, hi) = ([lo[1],hi[1],hi[1],lo[1],lo[1]], [lo[2],lo[2],hi[2],hi[2],lo[2]])
 
@@ -65,6 +65,14 @@ function plot_path(V::Matrix, idx_list = 1:size(V,2); kwargs...)
     plt.plot(V[1,idx_list]', V[2,idx_list]', linewidth=1.0, linestyle="-", zorder=2; kwargs...)
 end
 plot_path(V::Vector, idx_list = 1:length(V); kwargs...) = plot_path(hcat(V...), idx_list; kwargs...)
+
+function save_plot(fname, title = "")
+    axis("off")
+    axes()[:get_xaxis]()[:set_visible](false)
+    axes()[:get_yaxis]()[:set_visible](false)
+    title != "" && title(title, fontsize=20)
+    savefig(fname, bbox_inches="tight")
+end
 
 # using Compose
 
