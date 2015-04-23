@@ -29,4 +29,14 @@ const ISRR_POLY = Compound2D(
     ]
 )
 
+const ISRR_POLY_WITH_SPIKE = Compound2D(
+    Shape2D{Float64}[
+        Polygon([(0., .25), (.27, .28), (.17, .4), (0., .4)]),
+        Polygon([(.5, .2), (.2, .5), (.25, .7), (.4, .8), (.6, .8), (.7, .5)]),
+        Polygon([(.55, .2), (.75, .5), (.85, .5), (.85, .2)]),
+        Polygon([(.3, .6), (.15, .85), (.4, .6)]),
+        Circle([.9, .65], .1)
+    ]
+)
+
 nothing

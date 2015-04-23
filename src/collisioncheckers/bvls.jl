@@ -143,8 +143,8 @@ function bvls(A::AbstractMatrix, b::AbstractVector, l::AbstractVector, u::Abstra
         xnew = copy(x)
         xnew[between] = z
 
-        if (newi != 0 && xnew[newi] <= l[newi] && x[newi] == l[newi]) ||
-                (xnew[newi] >= u[newi] && x[newi] == u[newi])
+        if newi != 0 && ((xnew[newi] <= l[newi] && x[newi] == l[newi]) ||
+                (xnew[newi] >= u[newi] && x[newi] == u[newi]))
             #
             # Ooops- the freed variable wants to go beyond its bound.  Lock it down
             # and look for some other variable.
