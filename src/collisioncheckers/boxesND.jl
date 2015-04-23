@@ -79,10 +79,14 @@ function is_free_path(path::Path, obs::Matrix3D)
 end
 
 function closest(p::AbstractVector, o::AbstractMatrix, W::AbstractMatrix)
-    v = Variable(length(p))
-    problem = minimize(quad_form(v-p, W), view(o,:,1) <= v, v <= view(o,:,2))
-    solve!(problem, ECOS.ECOSSolver(verbose=false))
-    return (problem.optval, vec(v.value))
+    # v = Variable(length(p))
+    # problem = minimize(quad_form(v-p, W), view(o,:,1) <= v, v <= view(o,:,2))
+    # solve!(problem, ECOS.ECOSSolver(verbose=false))
+    # return (problem.optval, vec(v.value))
+    L = chol(W)
+    vmin = bvls(L, L*p, view(o,:,1), view(o,:,2))
+    d2min = dot(vmin - p, W*(vmin - p))
+    d2min, vmin
 end
 
 function closest(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix)
