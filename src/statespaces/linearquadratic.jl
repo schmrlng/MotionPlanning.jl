@@ -83,19 +83,18 @@ function inbounds(v, SS::LinearQuadraticStateSpace)
     end
     true
 end
-is_free_state(v, CC::PointRobot2D, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(SS.C * v, CC)
-function is_free_motion(v, w, CC::PointRobot2D, SS::LinearQuadraticStateSpace)   # TODO: inputs V, i, j instead of v, w
+is_free_state(v, CC::CollisionChecker, SS::LinearQuadraticStateSpace) = inbounds(v, SS) && is_free_state(SS.C * v, CC)
+function is_free_motion(v, w, CC::CollisionChecker, SS::LinearQuadraticStateSpace)   # TODO: inputs V, i, j instead of v, w
     t = steer(SS.dist.BVP, v, w, SS.dist.cmax)[2]   # terrible, hmm
     for s in linspace(0, t, 5)
         y = SS.C * SS.dist.BVP.x(v, w, t, s)
         !inbounds(y, SS) && return false
-        vy = Vector2(y)
-        s > 0 && !is_free_motion(vx, vy, CC) && return false
-        vx = vy
+        s > 0 && !is_free_motion(x, y, CC) && return false
+        x = y
     end
     true
 end
-# TODO: is_free_path(path, CC::PointRobot2D, SS::LinearQuadraticStateSpace)
+# TODO: is_free_path(path, CC::CollisionChecker, SS::LinearQuadraticStateSpace)
 
 function plot_tree(SS::LinearQuadraticStateSpace, NN::QuasiMetricNN, A; kwargs...)
     pts = hcat(NN[find(A)]...)
