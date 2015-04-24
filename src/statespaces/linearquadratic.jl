@@ -64,7 +64,7 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V
             d, t = steer(dist.BVP, view(VM,:,i), vj, dist.cmax)
             @inbounds DS[i,j], US[i,j] = d, FinalTime(t)
         end
-        @inbounds DS[j,j], US[j,j] = 0, FinalTime(0)
+        @inbounds DS[j,j], US[j,j] = 0, FinalTime(0.)
         for i = 1 : j-1
             d, t = steer(dist.BVP, view(VM,:,i), vj, dist.cmax)
             @inbounds DS[i,j], US[i,j] = d, FinalTime(t)
