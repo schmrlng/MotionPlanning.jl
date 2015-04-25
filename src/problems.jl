@@ -1,3 +1,4 @@
+import Base.copy
 export MPProblem, MPSolution
 
 type MPSolution
@@ -28,6 +29,12 @@ type MPProblem
 end
 
 MPProblem(SS::StateSpace, init::State, goal::Goal, CC::CollisionChecker) = MPProblem(SS, init, goal, CC, defaultNN(SS, init))
+function copy(P::MPProblem)
+    Pcopy = MPProblem(P.SS, P.init, P.goal, P.CC, P.V, P.config_name)
+    Pcopy.status = P.status
+    Pcopy.solution = P.solution
+    Pcopy
+end
 
 function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
     SS && plot(P.SS)
