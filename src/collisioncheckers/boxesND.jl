@@ -16,6 +16,8 @@ is_free_motion(v::AbstractVector, w::AbstractVector, CC::PointRobotNDBoxes) = is
 is_free_path(path::Path, CC::PointRobotNDBoxes) = is_free_path(path, CC.boxes)
 
 inflate(CC::PointRobotNDBoxes, eps) = eps > 0 ? PointRobotNDBoxes(CC.boxes .+ [-eps eps]) : CC  # TODO: rounded corners/edges
+addobstacle(CC::PointRobotNDBoxes, o::AbstractMatrix) = PointRobotNDBoxes(cat(3, CC.boxes, o))
+addblocker(CC::PointRobotNDBoxes, v::AbstractVector, r) = addobstacle(CC, [v-r v+r])
 closest(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix) = closest(p, CC.boxes, W)
 close(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix, r2) = close(p, CC.boxes, W, r2)
 

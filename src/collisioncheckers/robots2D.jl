@@ -20,6 +20,8 @@ function is_free_path(path::Path, CC::PointRobot2D)
     true
 end
 inflate(CC::PointRobot2D, eps) = eps > 0 ? PointRobot2D(inflate(CC.obstacles, eps)) : CC
+addobstacle(CC::PointRobot2D, o::Shape2D) = PointRobot2D(Compound2D([CC.obstacles, o]))
+addblocker(CC::PointRobot2D, p::AbstractVector, r) = addobstacle(CC, Circle(p, r))
 closest(p::Vector2, CC::PointRobot2D, W::AbstractMatrix) = closest(p, CC.obstacles, W)
 closest(p::AbstractVector, CC::PointRobot2D, W::AbstractMatrix) = closest(Vector2(p), CC.obstacles, W)
 close(p::Vector2, CC::PointRobot2D, W::AbstractMatrix, r2) = close(p, CC.obstacles, W, r2)
