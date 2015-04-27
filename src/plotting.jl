@@ -66,11 +66,11 @@ function plot_path(V::Matrix, idx_list = 1:size(V,2); kwargs...)
 end
 plot_path(V::Vector, idx_list = 1:length(V); kwargs...) = plot_path(hcat(V...), idx_list; kwargs...)
 
-function save_plot(fname, title = "")
+function save_plot(fname, title_string = "")
     axis("off")
     axes()[:get_xaxis]()[:set_visible](false)
     axes()[:get_yaxis]()[:set_visible](false)
-    title != "" && title(title, fontsize=20)
+    title_string != "" && title(title_string, fontsize=20)
     savefig(fname, bbox_inches="tight")
 end
 
