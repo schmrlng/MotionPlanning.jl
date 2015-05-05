@@ -11,8 +11,8 @@ using Distances
 using KDTrees
 # using Graphs
 using ImmutableArrays
-using Convex
-using ECOS
+# using Convex
+# using ECOS
 
 ### Planning Primitives
 export AbstractState, State, Path
@@ -40,5 +40,6 @@ include("plotting.jl")
 # TODO: "prototype" (.h-ish) files to specify required methods; julia type system makes OOP a pain
 # TODO: FMT re-solving is wonky with different sample sizes 
 # TODO: Think about parameterizing MPProblem on the StateSpace type (for ease of postprocessing)
+# TODO: Requires.jl for conditional dependency loading
 
 end # module

@@ -14,7 +14,8 @@ function volume(SS::RealVectorMetricSpace)
     error("Volume not yet implemented for non-Euclidean metrics!")
 end
 function defaultNN(SS::RealVectorMetricSpace, init)
-    V = typeof(init)[init]
+    init_st = vector_to_state(init, SS)
+    V = typeof(init_st)[init_st]
     SS.dist == Euclidean() && return EuclideanNN_KDTree(V)
     MetricNN_BruteForce(V, SS.dist)
 end

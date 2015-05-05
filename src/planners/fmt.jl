@@ -20,6 +20,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     free_volume_ub = sample_free!(P, N - length(P.V))
     dim = P.SS.dim
     r == 0. && (r = rm*2*(1/dim*free_volume_ub/(pi^(dim/2)/gamma(dim/2+1))*log(N)/N)^(1/dim))
+    setup_steering(P.SS, r)
 
     A = zeros(Int,N)
     W = trues(N); W[1] = false

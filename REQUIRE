@@ -1,0 +1,12 @@
+julia 0.3-
+PyPlot
+ArrayViews
+Devectorize
+Iterators
+GZip
+Grid
+Distances
+KDTrees
+ImmutableArrays
+SymPy
+FastAnonymous

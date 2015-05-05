@@ -18,6 +18,7 @@ end
 function LQOptSteering(A::Matrix, B::Matrix, c::Vector, R::Matrix, cmax = 1.)
     LQOptSteering(LinearQuadratic2BVP(A, B, c, R), cmax)
 end
+setup_steering(dist::LQOptSteering, r) = (dist.cmax = r)
 
 ## TODO: Approximate(ly Optimal) Steering
 # type LQApproxSteering{T<:FloatingPoint} <: LinearQuadratic
@@ -52,6 +53,7 @@ function defaultNN(SS::LinearQuadraticStateSpace, init)
     V = typeof(init)[init]
     QuasiMetricNN_BruteForce(V, SS.dist)
 end
+setup_steering(SS::LinearQuadraticStateSpace, r) = setup_steering(SS.dist, r)
 
 function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S})
     N = length(V)

@@ -1,5 +1,5 @@
 export StateSpace, GeometricStateSpace, RealVectorStateSpace, DifferentialStateSpace
-export vector_to_state, sample_space, volume, defaultNN, pairwise_distances
+export vector_to_state, sample_space, volume, defaultNN, pairwise_distances, setup_steering
 
 abstract StateSpace
 
@@ -16,6 +16,7 @@ is_free_path(path, CC::CollisionChecker, SS::StateSpace) = is_free_path(path, CC
 plot(SS::StateSpace) = plot_bounds(SS.lo, SS.hi)
 plot_path(SS::StateSpace, NN::NearNeighborCache, args...; kwargs...) = plot_path(NN.V, args...; kwargs...)
 plot_tree(SS::StateSpace, NN::NearNeighborCache, args...; kwargs...) = plot_tree(NN.V, args...; kwargs...)
+setup_steering(SS::StateSpace, r) = nothing
 
 include("statespaces/geometric.jl")
 include("statespaces/linearquadratic.jl")

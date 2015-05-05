@@ -104,16 +104,25 @@ function waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, TP::TurningPoints)
     end
     [(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
 end
-function waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP)
+function waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP, smooth = false)
+    v0x = v.x
     pts = Array(Vector2{T}, 0)
     for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
         s_pts = waypoints(v, s, SS.r, TP)
         append!(pts, s_pts[1:end-1])
         v = RSState(s_pts[end], v.t + s.t*s.d)
     end
+    if smooth
+        scale_factor = (w.x - v0x) ./ (v.x - v0x)
+        for i in 1:length(pts)
+            pts[i] = v0x + (pts[i] - v0x) .* scale_factor
+        end
+    end
     push!(pts, w.x)
 end
-waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP) = waypoints(NN[i], NN[j], SS, TP)
+function waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP, smooth = false)
+    waypoints(NN[i], NN[j], SS, TP, smooth)
+end
 
 inbounds(v::RSState, SS::ReedsSheppStateSpace) = (SS.lo[1] < v.x[1] < SS.hi[1] && SS.lo[2] < v.x[2] < SS.hi[2])
 inbounds(v::AbstractVector, SS::ReedsSheppStateSpace) = (SS.lo[1] < v[1] < SS.hi[1] && SS.lo[2] < v[2] < SS.hi[2])
@@ -140,7 +149,7 @@ end
 
 function plot_path(SS::ReedsSheppStateSpace, NN::NearNeighborCache, sol; kwargs...)
     TP = TurningPoints(SS.r, 50)
-    wps = hcat([hcat(waypoints(sol[i], sol[i+1], NN, SS, TP)...) for i in 1:length(sol)-1]...)
+    wps = hcat([hcat(waypoints(sol[i], sol[i+1], NN, SS, TP, true)...) for i in 1:length(sol)-1]...)
     length(sol) > 1 && plot_path(wps; kwargs...)
     # plt.quiver([wps[row,1:3:end]' for row in 1:4]..., zorder=5, width=.003, headwidth=8)
 end
