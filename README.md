@@ -8,6 +8,12 @@ A Julia package containing motion planning code related to the following papers 
 - [Optimal Sampling-Based Motion Planning under Differential Constraints: the Drift Case with Linear Affine Dynamics](http://arxiv.org/abs/1405.7421)
 - [Monte Carlo Motion Planning for Robot Trajectory Optimization Under Uncertainty](http://arxiv.org/abs/1504.08053)
 
+After reading the Dependencies section below, install with
+```julia
+Pkg.clone("https://github.com/schmrlng/CPUTime.jl.git")
+```
+at the ```julia>``` prompt (and let me know if it actually works!).
+
 ## Documentation
 Doesn't exist. At least for now. Check out some [basic usage examples](http://nbviewer.ipython.org/github/schmrlng/MotionPlanning.jl/blob/master/doc/MotionPlanning.ipynb) and peruse the source, or message me if you have any particular questions about the code.
 
