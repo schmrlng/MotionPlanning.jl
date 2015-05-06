@@ -10,7 +10,7 @@ A Julia package containing motion planning code related to the following papers 
 
 After reading the Dependencies section below, install with
 ```julia
-Pkg.clone("https://github.com/schmrlng/CPUTime.jl.git")
+Pkg.clone("https://github.com/schmrlng/MotionPlanning.jl.git")
 ```
 at the ```julia>``` prompt (and let me know if it actually works!).
 
