@@ -105,7 +105,6 @@ function waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, TP::TurningPoints)
     [(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
 end
 function waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP, smooth = false)
-    v0x = v.x
     pts = Array(Vector2{T}, 0)
     for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
         s_pts = waypoints(v, s, SS.r, TP)
@@ -113,12 +112,16 @@ function waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, TP
         v = RSState(s_pts[end], v.t + s.t*s.d)
     end
     if smooth
-        scale_factor = (w.x - v0x) ./ (v.x - v0x)
-        for i in 1:length(pts)
-            pts[i] = v0x + (pts[i] - v0x) .* scale_factor
+        push!(pts, v.x)
+        segment_lengths = map(norm, diff(pts))
+        scale_factors = cumsum(segment_lengths) ./ sum(segment_lengths)
+        for i in 1:length(scale_factors)
+            pts[i+1] = pts[i+1] + scale_factors[i]*(w.x - v.x)
         end
+    else
+        push!(pts, w.x)
     end
-    push!(pts, w.x)
+    pts
 end
 function waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP, smooth = false)
     waypoints(NN[i], NN[j], SS, TP, smooth)
