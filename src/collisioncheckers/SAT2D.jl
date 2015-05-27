@@ -119,6 +119,7 @@ type Compound2D{T} <: Shape2D{T}
     yrange::Vector2{T}
 end
 function Compound2D{T}(parts::Vector{Shape2D{T}})    # TODO: allow Vectors of Shape subtypes
+    isempty(parts) && return Compound2D{T}(parts, Vector2{T}(zero(T), zero(T)), Vector2{T}(zero(T), zero(T)))
     xrange = Vector2{T}(extrema(vcat([S.xrange for S in parts]...))...)
     yrange = Vector2{T}(extrema(vcat([S.yrange for S in parts]...))...)
     Compound2D{T}(parts, xrange, yrange)
