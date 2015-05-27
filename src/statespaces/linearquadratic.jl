@@ -12,7 +12,7 @@ controltype(d::LinearQuadratic) = FinalTime
 
 ## Optimal Steering
 type LQOptSteering{T} <: LinearQuadratic{T}
-    BVP::LinearQuadratic2BVP
+    BVP::LinearQuadratic2BVP{T}
     cmax::T         # for potential pruning
 end
 function LQOptSteering(A::Matrix, B::Matrix, c::Vector, R::Matrix, cmax = 1.)

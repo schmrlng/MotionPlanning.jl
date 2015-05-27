@@ -28,8 +28,14 @@ end
 
 ### Time-optimal 2BVP solution
 
-immutable LinearQuadratic2BVP
+immutable LinearQuadratic2BVP{T<:FloatingPoint}
+    A::Matrix{T}
+    B::Matrix{T}
+    c::Vector{T}
+    R::Matrix{T}
     Ginv::DataType      # weird side effect of FastAnonymous
+    expAt::DataType
+    cdrift::DataType
     cost::DataType
     dcost::DataType
     ddcost::DataType
@@ -55,7 +61,10 @@ function LinearQuadratic2BVP(A::Matrix, B::Matrix, c::Vector, R::Matrix)
     xS = expAsS*xS + SymPy.integrate(expAsS, s)*c +
          SymPy.integrate(expAsS*B*inv(R)*B'*expAsS', s)*expAt(A, t - s)'*GinvS*(yS-xbarS)
     
-    LinearQuadratic2BVP(Sym2Function(GinvS, :(t), replace_rule),
+    LinearQuadratic2BVP(A, B, c, R,
+                        Sym2Function(GinvS, :(t), replace_rule),
+                        Sym2Function(expAtS, :(t), replace_rule),
+                        Sym2Function(cdriftS, :(t), replace_rule),
                         Sym2Function(costS, :(x, y, t), replace_rule),
                         Sym2Function(dcostS, :(x, y, t), replace_rule),
                         Sym2Function(ddcostS, :(x, y, t), replace_rule),
