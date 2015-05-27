@@ -39,4 +39,6 @@ const ISRR_POLY_WITH_SPIKE = Compound2D(
     ]
 )
 
+const EMPTY_2D = Compound2D(Shape2D{Float64}[])
+
 nothing
