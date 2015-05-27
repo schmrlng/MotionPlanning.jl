@@ -6,8 +6,8 @@ abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and tri
 type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
     dist::QuasiMetric
-    DS::Matrix{T}
-    US::Matrix{U}
+    DS::SparseMatrixCSC{T,Int}
+    US::SparseMatrixCSC{U,Int}
     cacheF::Vector{Neighborhood{T}}
     cacheB::Vector{Neighborhood{T}}
     kNNrF::Vector{T}
@@ -31,13 +31,14 @@ QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
 ## Forwards
 
 function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
-    @devec nn_bool = NN.DS[v,:] .<= r
+    @devec nn_bool = (0 .< NN.DS[v,:] .<= r)
     nn_bool[v] = false
     inds = find(nn_bool)
-    Neighborhood(inds, vec(NN.DS[v,inds]))
+    Neighborhood(inds, vec(full(NN.DS[v,inds])))
 end
 
 function knnF(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+    error("TODO: this code needs a fix to work with sparse DS")
     r = select!(vec(NN.DS[v,:]), k+1)     # TODO: could be faster with an ArrayView and leveraging quickselect algo
     nbhd = inballF(NN, v, r)
     p = sortperm(nbhd.ds)
@@ -49,13 +50,14 @@ end
 ## Backwards
 
 function inballB(NN::QuasiMetricNN_BruteForce, v::Int, r)
-    @devec nn_bool = NN.DS[:,v] .<= r
+    @devec nn_bool = (0 .< NN.DS[:,v] .<= r)
     nn_bool[v] = false
     inds = find(nn_bool)
-    Neighborhood(inds, NN.DS[inds,v])
+    Neighborhood(inds, vec(full(NN.DS[inds,v])))
 end
 
 function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+    error("TODO: this code needs a fix to work with sparse DS")
     r = select!(NN.DS[:,v], k+1)     # TODO: could be faster with an ArrayView and leveraging quickselect algo
     nbhd = inballB(NN, v, r)
     p = sortperm(nbhd.ds)

@@ -55,23 +55,30 @@ function defaultNN(SS::LinearQuadraticStateSpace, init)
 end
 setup_steering(SS::LinearQuadraticStateSpace, r) = setup_steering(SS.dist, r)
 
-function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S})
+function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S}, batchsize = 1001)
     N = length(V)
-    VM = hcat(V...)
-    DS = Array(T, N, N)
-    US = Array(FinalTime, N, N)
-    for j = 1 : N
-        vj = view(VM,:,j)
-        for i = j+1 : N
-            d, t = steer(dist.BVP, view(VM,:,i), vj, dist.cmax)
-            @inbounds DS[i,j], US[i,j] = d, FinalTime(t)
-        end
-        @inbounds DS[j,j], US[j,j] = 0, FinalTime(0.)
-        for i = 1 : j-1
-            d, t = steer(dist.BVP, view(VM,:,i), vj, dist.cmax)
-            @inbounds DS[i,j], US[i,j] = d, FinalTime(t)
-        end
+    V1 = hcat(V...)
+    t = dist.cmax
+    V0bar = dist.BVP.expAt(t)*V1 .+ dist.BVP.cdrift(t)
+    Ginv = dist.BVP.Ginv(t)
+    BRB = dist.BVP.B*inv(dist.BVP.R)*dist.BVP.B'
+    
+    cd = pairwise(SqMahalanobis(Ginv*BRB*Ginv), V0bar, V1)
+    LHT = Ginv*(dist.BVP.A*V1 .+ dist.BVP.c)
+
+    T1 = Distances.dot_percol(V1, LHT)
+    BLAS.gemm!('T', 'N', -2., V0bar, LHT, 1., cd)
+    broadcast!(.+, cd, cd, 2*T1')
+    broadcast!(.-, cd, 1, cd)
+
+    IS, JS = findn(cd .> 0)
+    VTS = [MotionPlanning.steer(dist.BVP, V[i], V[j], t) for (i,j) in zip(IS, JS)]
+    II = find(T[v for (v,t) in VTS] .<= t)
+    DS = sparse(IS[II], JS[II], T[v for (v,t) in VTS[II]], N, N)
+    for i in 1:N
+        DS[i,i] = 0.
     end
+    US = sparse(IS[II], JS[II], FinalTime{T}[FinalTime(t) for (v,t) in VTS[II]], N, N)
     DS, US
 end
 
