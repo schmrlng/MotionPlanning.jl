@@ -5,7 +5,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
                                         connections::Symbol = :R,
                                         k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1),
                                         r = 0.,
-                                        checkpts = false)
+                                        checkpts = true)  # TODO: bleh, prefer false
     tic()
     P.CC.count = 0
 

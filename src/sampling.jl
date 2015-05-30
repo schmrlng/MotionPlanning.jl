@@ -9,7 +9,7 @@ function sample_free_goal(P::MPProblem)
 end
 
 function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_bias = 0.0)
-    N == 0 && return 1.
+    N == 0 && return volume(P.SS)
     V = P.V.V
     W = Array(eltype(V), N)
     if length(V) > 0 && V[1] == P.init

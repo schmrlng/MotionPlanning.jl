@@ -34,8 +34,24 @@ function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructu
     NN.DS = NNDC.DS[filter,filter]
     NN.US = NNDC.US[filter,filter]
     if NN.V[1] != init
-        # TODO
+        # TODO, or make this part of fmtstar!, or even sample_free!
+        # also goal check
     end
+    NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
+    NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
+    # TODO: this info should be cached too but it's late and this hack will work
+    r = maximum(NN.DS)
+    for v in 1:N
+        inballF!(NN,v,r)
+        inballB!(NN,v,r)
+    end
+    NN
+end
+function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructureCache)
+    N = length(NNDC.V)
+    NN.V = NNDC.V
+    NN.DS = NNDC.DS
+    NN.US = NNDC.US
     NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
     NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
     # TODO: this info should be cached too but it's late and this hack will work
