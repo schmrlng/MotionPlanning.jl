@@ -1,4 +1,4 @@
-export QuasiMetric, QuasiMetricNN_BruteForce
+export QuasiMetric, QuasiMetricNN_BruteForce, generate_QM_cache
 
 abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and triangle inequality (no symmetry)
 
@@ -36,6 +36,7 @@ function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructu
     if NN.V[1] != init
         # TODO, or make this part of fmtstar!, or even sample_free!
         # also goal check
+        # also Ross's ML stuff is maybe worth a shot if dist eval is super duper slow
     end
     NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
     NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
@@ -61,6 +62,14 @@ function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructu
         inballB!(NN,v,r)
     end
     NN
+end
+function generate_QM_cache(SS, N, init, goal, r, fname = Pkg.dir("MotionPlanning")*"/data/DI_$(N)_$(r)")  # TODO: init, goal only here as a stopgap until quasimetricNN.jl:37 addressed
+    V = [sample_space(SS) for i in 1:N]
+    V[1] = init
+    V[end] = vector_to_state(sample_goal(goal), SS)
+    setup_steering(SS, r)
+    NNDC = NNDatastructureCache(QuasiMetricNN_BruteForce(V, SS.dist))
+    saveNN(NNDC, fname)
 end
 
 ## Forwards
