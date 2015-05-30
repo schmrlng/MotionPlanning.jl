@@ -44,6 +44,7 @@ type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: Me
     V::Vector{S}
     dist::Metric
     DS::KDTree
+    US::Nothing
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
 
@@ -56,6 +57,7 @@ end
 function initcache{S,T,U}(NN::EuclideanNN_KDTree{S,T,U})
     N = length(NN.V)
     NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    NN.US = nothing
     NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
@@ -124,25 +126,6 @@ end
 #         NN
 #     end
 # end
-
-# type CachedMetricNN{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN  # TODO: refactor cache -> ball vs. knn
-#     V::Vector{S}
-#     dist::Metric
-#     cache::Vector{Neighborhood{T}}
-#     kNNr::Vector{T}
-# end
-# function CachedMetricNN(NN::MetricNN)
-#     # with above TODO: make sure cache is populated
-#     CachedMetricNN(NN.V, NN.dist, NN.cache, NN.kNNr)
-# end
-# function CachedMetricNN(fname::String)
-#     open(fname, "r") do f
-#         deserialize(f)
-#     end
-# end
-# inball(NN::CachedMetricNN{S,T,U}, v::Int, r) = error("Online inball eval in CachedMetricNN: check intialization?")
-# knn(NN::CachedMetricNN{S,T,U}, v::Int, k) = error("Online knn eval in CachedMetricNN: check intialization?")
-# function saveNN(NN::MetricNN, fname::String)
 
 ### General Methods
 function inball!(NN::MetricNN, v::Int, r)

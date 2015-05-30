@@ -27,6 +27,25 @@ function initcache{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U})
 end
 QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
     QuasiMetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructureCache, init::State, goal::Goal, CC::CollisionChecker)
+    filter = Bool[is_free_state(v, CC) for v in NNDC.V]
+    N = sum(filter)
+    NN.V = NNDC.V[filter]
+    NN.DS = NNDC.DS[filter,filter]
+    NN.US = NNDC.US[filter,filter]
+    if NN.V[1] != init
+        # TODO
+    end
+    NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
+    NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
+    # TODO: this info should be cached too but it's late and this hack will work
+    r = maximum(NN.DS)
+    for v in 1:N
+        inballF!(NN,v,r)
+        inballB!(NN,v,r)
+    end
+    NN
+end
 
 ## Forwards
 
