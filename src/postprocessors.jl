@@ -1,4 +1,4 @@
-export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path
+export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path, cost_discretize_solution!
 
 ### ADAPTIVE-SHORTCUT (Hsu 2000)
 
@@ -96,6 +96,22 @@ function RSsmooth_and_discretize!(P::MPProblem, dx)
     push!(dpath, P.V[sol[end]].x)
     dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
     P.solution.metadata["smoothed_path"] = dpath
+end
+
+function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
+    sol = P.solution.metadata["path"]
+    costs = P.solution.metadata["cumcost"]
+    x0 = state2workspace(P.V[sol[1]], P.SS)
+    dpath = typeof(x0)[x0]
+    c = dc
+    for i in 1:length(sol)-1
+        while c < costs[i+1]
+            push!(dpath, cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]))
+            c = c + dc
+        end
+    end
+    push!(dpath, state2workspace(P.V[sol[end]], P.SS))
+    P.solution.metadata["discretized_path"] = dpath
 end
 
 ### Linear Quadratic Discretization

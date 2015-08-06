@@ -24,7 +24,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     if checkpts
         F = trues(N)
         for i in 1:N
-            F[i] = is_free_state(P.V[i], P.CC)
+            F[i] = is_free_state(P.V[i], P.CC, P.SS)
         end
     end
     dim = P.SS.dim
@@ -65,8 +65,10 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     end
 
     sol = [z]
+    costs = [C[z]]
     while sol[1] != 1
         unshift!(sol, A[sol[1]])
+        unshift!(costs, C[sol[1]])
     end
 
     P.status = is_goal_pt(P.V[z], P.goal) ? :solved : :failed
@@ -75,6 +77,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         "collision_checks" => P.CC.count,
         "num_samples" => N,
         "cost" => C[z],
+        "cumcost" => costs,
         "planner" => "FMTstar",
         "solved" => is_goal_pt(P.V[z], P.goal),
         "tree" => A,

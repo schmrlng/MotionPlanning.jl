@@ -1,6 +1,6 @@
 import Base.eltype, Base.getindex, Base.convert, Base.hcat
 export RSState, TurningPoints, RSMetric, RSSegment, RSDiscrete, ReedsSheppStateSpace
-export waypoints
+export waypoints, time_waypoint, cost_waypoint
 
 ### Types and Utilties
 ## State
@@ -126,6 +126,30 @@ end
 function waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, TP::TurningPoints = SS.TP, smooth = false)
     waypoints(NN[i], NN[j], SS, TP, smooth)
 end
+
+function time_waypoint{T}(v::RSState{T}, s::RSSegment{T}, r::T, t::T)
+    s.t == 0 && return v.x + min(t, s.d)*Vector2(cos(v.t), sin(v.t))
+    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
+    th = min(t/r, abs(s.d))
+    turnpt = s.t*s.d > 0 ? Vector2(r*cos(th), r*sin(th)) : Vector2(r*cos(th), -r*sin(th))
+    center + sign(s.t)*rotate(turnpt, v.t-pi/2)
+end
+function time_waypoint{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, t::T)
+    pt = w
+    total_time = 0    # should be similar to SS.dist.costs[RSvec2sub(v, w, SS.dist)...], up to smoothing stuff
+    for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
+        segment_time = s.t == 0 ? abs(s.d) : SS.r*abs(s.d)
+        if total_time <= t < total_time + segment_time
+            pt = time_waypoint(v, s, SS.r, t - total_time)
+        end
+        total_time = total_time + segment_time
+        v = RSState(time_waypoint(v, s, SS.r, Inf), v.t + s.t*s.d)
+    end
+    t > total_time && return w.x
+    pt + t/total_time*(w.x - v.x)
+end
+cost_waypoint{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, t::T) = time_waypoint(v, w, SS, t)
+state2workspace(v::RSState, SS::ReedsSheppStateSpace) = v.x
 
 inbounds(v::RSState, SS::ReedsSheppStateSpace) = (SS.lo[1] < v.x[1] < SS.hi[1] && SS.lo[2] < v.x[2] < SS.hi[2])
 inbounds(v::AbstractVector, SS::ReedsSheppStateSpace) = (SS.lo[1] < v[1] < SS.hi[1] && SS.lo[2] < v[2] < SS.hi[2])
