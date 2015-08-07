@@ -32,6 +32,7 @@ immutable RSSegment{T<:FloatingPoint}
 end
 immutable RSDiscrete{T<:FloatingPoint} <: RSMetric
     r::T
+    reverse_penalty::T
     Xmax::T
     Ymax::T
     Nx::Int
@@ -40,7 +41,7 @@ immutable RSDiscrete{T<:FloatingPoint} <: RSMetric
     costs::InterpGrid{T,3,BCnil,InterpQuadratic}
     paths::Array{Vector{RSSegment},3}
 end
-function RSDiscrete{T<:FloatingPoint}(r::T = 1., Xmax::T = 5., Ymax::T = 5., Nx::Int = 101, Ny::Int = 101, Nt::Int = 101)
+function RSDiscrete{T<:FloatingPoint}(r::T = 1., reverse_penalty::T = 0., Xmax::T = 5., Ymax::T = 5., Nx::Int = 101, Ny::Int = 101, Nt::Int = 101)
     RS_costs = Array(Float64, Nx, Ny, Nt + 1)  # + 1 for cost interpolation; slice 1 and Nt + 1 are identical
     RS_paths = Array(Vector{RSSegment}, Nx, Ny, Nt)
 
@@ -52,9 +53,10 @@ function RSDiscrete{T<:FloatingPoint}(r::T = 1., Xmax::T = 5., Ymax::T = 5., Nx:
         RS_costs[i] = r*parsefloat(T, sl[1])
         RS_paths[i] = [RSSegment(sl[2j] == "L" ? 1 : sl[2j] == "R" ? -1 : 0,
                                  (sl[2j] == "S" ? r : 1)*parsefloat(T, sl[2j+1])) for j in 1:div(length(sl) - 1, 2)]
+        RS_costs[i] = RS_costs[i] + reverse_penalty*sum([s.d < 0 for s in RS_paths[i]])
     end
     RS_costs[:,:,Nt+1] = RS_costs[:,:,1]
-    RSDiscrete(r, r*Xmax, r*Ymax, Nx, Ny, Nt, InterpGrid(RS_costs, BCnil, InterpQuadratic), RS_paths)
+    RSDiscrete(r, reverse_penalty, r*Xmax, r*Ymax, Nx, Ny, Nt, InterpGrid(RS_costs, BCnil, InterpQuadratic), RS_paths)
 end
 
 ## State Space
@@ -64,9 +66,11 @@ immutable ReedsSheppStateSpace{T<:FloatingPoint} <: StateSpace
     hi::Vector2{T}
     dist::RSDiscrete{T}
     r::T
+    reverse_penalty::T
     TP::TurningPoints{T}
 end
-ReedsSheppStateSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) = ReedsSheppStateSpace(3, lo, hi, RSDiscrete(r), r, TurningPoints(r, res))
+ReedsSheppStateSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); reverse_penalty = 0., res = 16) =
+    ReedsSheppStateSpace(3, lo, hi, RSDiscrete(r, reverse_penalty), r, reverse_penalty, TurningPoints(r, res))
 
 vector_to_state{T}(v::AbstractVector{T}, SS::ReedsSheppStateSpace{T}) = RSState(Vector2(v), zero(T))   # Required for goal sampling TODO: RSGoal?
 sample_space{T}(SS::ReedsSheppStateSpace{T}) = RSState(SS.lo + Vector2{T}(rand(T), rand(T)).*(SS.hi-SS.lo), convert(T, 2pi*rand(T)))   # TODO: @devec
