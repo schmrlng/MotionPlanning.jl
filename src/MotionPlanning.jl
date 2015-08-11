@@ -14,15 +14,10 @@ using ImmutableArrays
 # using Convex
 # using ECOS
 
-### Planning Primitives
-export AbstractState, State, Path
-
-abstract AbstractState
-typealias State Union(AbstractVector, AbstractState)
-typealias Path{T<:State} Vector{T}
-
 ### Includes
+include("primitivetypes.jl")
 include("utilities/collections.jl")
+include("utilities/vec2Dutils.jl")
 include("collisioncheckers.jl")
 include("goals.jl")
 include("nearneighbors.jl")

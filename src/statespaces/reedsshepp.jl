@@ -46,7 +46,7 @@ function RSDiscrete{T<:FloatingPoint}(r::T = 1., reverse_penalty::T = 0., Xmax::
     RS_paths = Array(Vector{RSSegment}, Nx, Ny, Nt)
 
     fname = joinpath(Pkg.dir("MotionPlanning"),"src","statespaces",
-                     @sprintf("ReedsShepp_%.2f_%.2f_%d_%d_%d.gz", Xmax, Ymax, Nx, Ny, Nt))
+                     @sprintf("Dubins_%.2f_%.2f_%d_%d_%d.gz", Xmax, Ymax, Nx, Ny, Nt))
     RS_lines = readlines(GZip.open(fname))
     for i in 1:length(RS_paths)  # RS_lines may have an extra newline depending on OS
         sl = split(RS_lines[i])
