@@ -16,7 +16,7 @@ immutable PointGoal{T<:FloatingPoint} <: Goal
 end
 
 plot(G::RectangleGoal) = plot_rectangle(G.bounds, color = "green")
-plot(G::BallGoal) = plot_circle(G.center, G.radius, xmax = 1, ymax = 1, color = "green")
+plot(G::BallGoal) = plot_circle(G.center, G.radius, color = "green")
 plot(G::PointGoal) = scatter(G.pt[1], G.pt[2], color = "green", zorder=5)
 
 ## Rectangle Goal
