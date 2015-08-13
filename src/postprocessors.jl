@@ -100,7 +100,7 @@ end
 
 function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
     sol = P.solution.metadata["path"]
-    costs = cumsum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], SS.dist)...]])
+    costs = cumsum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in P.SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], P.SS.dist)...]])
                     for i in 1:length(sol)-1])
     unshift!(costs, 0.)
     x0 = state2workspace(P.V[sol[1]], P.SS)
@@ -118,9 +118,9 @@ end
 
 function cost_space_solution!(P::MPProblem, n)
     sol = P.solution.metadata["path"]
-    total_cost = sum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], SS.dist)...]])
+    total_cost = sum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in P.SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], P.SS.dist)...]])
                       for i in 1:length(sol)-1])
-    cost_discretize_solution!(P::MPProblem, total_cost / (n-1))
+    cost_discretize_solution!(P, total_cost / (n-1))
     P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]  # could have n+1 from numerical error
 end
 
