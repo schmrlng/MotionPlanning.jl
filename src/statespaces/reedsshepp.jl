@@ -139,7 +139,7 @@ function time_waypoint{T}(v::RSState{T}, s::RSSegment{T}, r::T, t::T)
     center + sign(s.t)*rotate(turnpt, v.t-pi/2)
 end
 function time_waypoint{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, t::T)
-    pt = w
+    pt = w.x
     total_time = 0    # should be similar to SS.dist.costs[RSvec2sub(v, w, SS.dist)...], up to smoothing stuff
     for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
         segment_time = s.t == 0 ? abs(s.d) : SS.r*abs(s.d)
