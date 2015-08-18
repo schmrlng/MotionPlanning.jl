@@ -199,7 +199,7 @@ function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
     GZip.close(fh)
 end
 
-### Reeds-Shepp Steering Nuts and Bolts (TODO: if I'm really worried about speed, everything should get '!'s)
+### Reeds-Shepp Steering Nuts and Bolts
 ## Utilities
 R(x, y) = sqrt(x*x + y*y), atan2(y, x)
 function M(t)
@@ -218,15 +218,28 @@ Omega(u, v, E, N, t) = M(Tau(u, v, E, N) - u + v - t)
 timeflip{T}(s::SE2State{T}) = SE2State(-s.x[1], s.x[2], -s.t)
 reflect{T}(s::SE2State{T}) = SE2State(s.x[1], -s.x[2], -s.t)
 backwards{T}(s::SE2State{T}) = SE2State(s.x[1]*cos(s.t) + s.x[2]*sin(s.t), s.x[1]*sin(s.t) - s.x[2]*cos(s.t), s.t)
-timeflip{T}(p::CarPath{T}) = [CarSegment{T}(s.t, -s.d) for s in p]
-reflect{T}(p::CarPath{T}) = [CarSegment{T}(-s.t, s.d) for s in p]
-backwards{T}(p::CarPath{T}) = reverse(p)
+function timeflip!{T}(p::CarPath{T})
+    for i in 1:length(p)
+        p[i] = CarSegment{T}(p[i].t, -p[i].d)
+    end
+    p
+end
+function reflect!{T}(p::CarPath{T})
+    for i in 1:length(p)
+        p[i] = CarSegment{T}(-p[i].t, p[i].d)
+    end
+    p
+end
+backwards!{T}(p::CarPath{T}) = reverse!(p)
+
+# TODO: something about an enum type in Julia v0.4?
+const POST, POST_T, POST_R, POST_B, POST_R_T, POST_B_T, POST_B_R, POST_B_R_T = 0, 1, 2, 3, 4, 5, 6, 7
 
 ## Gotta check 'em all
 function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T})
     dx, dy = s2.x - s1.x
-    c, s = cos(s1.t), sin(s1.t)
-    target = SE2State(dx*c + dy*s, -dx*s + dy*c, s2.t - s1.t)
+    ct, st = cos(s1.t), sin(s1.t)
+    target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, s2.t - s1.t)
 
     tTarget = timeflip(target)
     rTarget = reflect(target)
@@ -235,183 +248,251 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T})
     btTarget = timeflip(bTarget)
     brTarget = reflect(bTarget)
     btrTarget = reflect(btTarget)
-
-    cmin, pmin = Inf, CarSegment{T}[]
+    
+    c, p, l = inf(T), Array(CarSegment{T}, 5), 0
     # Only Tim Wheeler knows what the hell is happening down below
     # (8.1) C S C
-    c, p = LpSpLp(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpSpLp(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpSpLp(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpSpLp(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
+    b, c, l = LpSpLp!(target, c, l, p); b && (post = POST)
+    b, c, l = LpSpLp!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpSpLp!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpSpLp!(trTarget, c, l, p); b && (post = POST_R_T)
 
     # (8.2) C S C
-    c, p = LpSpRp(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpSpRp(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpSpRp(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpSpRp(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
+    b, c, l = LpSpRp!(target, c, l, p); b && (post = POST)
+    b, c, l = LpSpRp!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpSpRp!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpSpRp!(trTarget, c, l, p); b && (post = POST_R_T)
 
     # (8.3) C|C|C
-    c, p = LpRmLp(target); if c < cmin; cmin, pmin = c, p; end                                   # L+R-L+
-    # c, p = LpRmLp(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end                      # L-R+L- (redundant)
-    c, p = LpRmLp(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end                         # R+L-R+
-    # c, p = LpRmLp(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end            # R-L+R- (redundant)
+    b, c, l = LpRmLp!(target, c, l, p); b && (post = POST)
+    # b, c, l = LpRmLp!(tTarget, c, l, p); b && (post = POST_T) # (redundant)
+    b, c, l = LpRmLp!(rTarget, c, l, p); b && (post = POST_R)
+    # b, c, l = LpRmLp!(trTarget, c, l, p); b && (post = POST_R_T) # (redundant)
 
     # (8.4) C|C C
-    c, p = LpRmLm(target); if c < cmin; cmin, pmin = c, p; end                                   # L+R-L-
-    c, p = LpRmLm(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end                        # L-R+L+
-    c, p = LpRmLm(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end                         # R+L-R-
-    c, p = LpRmLm(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end              # R-L+R+
-    c, p = LpRmLm(bTarget); if c < cmin; cmin, pmin = c, backwards(p); end                       # L-R-L+
-    c, p = LpRmLm(btTarget); if c < cmin; cmin, pmin = c, backwards(timeflip(p)); end            # L+R+L-
-    c, p = LpRmLm(brTarget); if c < cmin; cmin, pmin = c, backwards(reflect(p)); end             # R-L-R+
-    c, p = LpRmLm(btrTarget); if c < cmin; cmin, pmin = c, backwards(reflect(timeflip(p))); end  # R+L+R-
+    b, c, l = LpRmLm!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRmLm!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRmLm!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRmLm!(trTarget, c, l, p); b && (post = POST_R_T)
+    b, c, l = LpRmLm!(bTarget, c, l, p); b && (post = POST_B)
+    b, c, l = LpRmLm!(btTarget, c, l, p); b && (post = POST_B_T)
+    b, c, l = LpRmLm!(brTarget, c, l, p); b && (post = POST_B_R)
+    b, c, l = LpRmLm!(btrTarget, c, l, p); b && (post = POST_B_R_T)
 
     # (8.7) C Cu|Cu C
-    c, p = LpRpuLmuRm(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpRpuLmuRm(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpRpuLmuRm(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpRpuLmuRm(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
+    b, c, l = LpRpuLmuRm!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRpuLmuRm!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRpuLmuRm!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRpuLmuRm!(trTarget, c, l, p); b && (post = POST_R_T)
 
     # (8.8) C|Cu Cu|C
-    c, p = LpRmuLmuRp(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpRmuLmuRp(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpRmuLmuRp(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpRmuLmuRp(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
+    b, c, l = LpRmuLmuRp!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRmuLmuRp!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRmuLmuRp!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRmuLmuRp!(trTarget, c, l, p); b && (post = POST_R_T)
 
     # (8.9)
-    c, p = LpRmSmLm(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpRmSmLm(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpRmSmLm(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpRmSmLm(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
-    c, p = LpRmSmLm(bTarget); if c < cmin; cmin, pmin = c, backwards(p); end
-    c, p = LpRmSmLm(btTarget); if c < cmin; cmin, pmin = c, backwards(timeflip(p)); end
-    c, p = LpRmSmLm(brTarget); if c < cmin; cmin, pmin = c, backwards(reflect(p)); end
-    c, p = LpRmSmLm(btrTarget); if c < cmin; cmin, pmin = c, backwards(reflect(timeflip(p))); end
+    b, c, l = LpRmSmLm!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRmSmLm!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRmSmLm!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRmSmLm!(trTarget, c, l, p); b && (post = POST_R_T)
+    b, c, l = LpRmSmLm!(bTarget, c, l, p); b && (post = POST_B)
+    b, c, l = LpRmSmLm!(btTarget, c, l, p); b && (post = POST_B_T)
+    b, c, l = LpRmSmLm!(brTarget, c, l, p); b && (post = POST_B_R)
+    b, c, l = LpRmSmLm!(btrTarget, c, l, p); b && (post = POST_B_R_T)
 
     # (8.10)
-    c, p = LpRmSmRm(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpRmSmRm(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpRmSmRm(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpRmSmRm(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
-    c, p = LpRmSmRm(bTarget); if c < cmin; cmin, pmin = c, backwards(p); end
-    c, p = LpRmSmRm(btTarget); if c < cmin; cmin, pmin = c, backwards(timeflip(p)); end
-    c, p = LpRmSmRm(brTarget); if c < cmin; cmin, pmin = c, backwards(reflect(p)); end
-    c, p = LpRmSmRm(btrTarget); if c < cmin; cmin, pmin = c, backwards(reflect(timeflip(p))); end
+    b, c, l = LpRmSmRm!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRmSmRm!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRmSmRm!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRmSmRm!(trTarget, c, l, p); b && (post = POST_R_T)
+    b, c, l = LpRmSmRm!(bTarget, c, l, p); b && (post = POST_B)
+    b, c, l = LpRmSmRm!(btTarget, c, l, p); b && (post = POST_B_T)
+    b, c, l = LpRmSmRm!(brTarget, c, l, p); b && (post = POST_B_R)
+    b, c, l = LpRmSmRm!(btrTarget, c, l, p); b && (post = POST_B_R_T)
 
     # (8.11) C|Cpi/2 S Cpi/2|C
-    c, p = LpRmSmLmRp(target); if c < cmin; cmin, pmin = c, p; end
-    c, p = LpRmSmLmRp(tTarget); if c < cmin; cmin, pmin = c, timeflip(p); end
-    c, p = LpRmSmLmRp(rTarget); if c < cmin; cmin, pmin = c, reflect(p); end
-    c, p = LpRmSmLmRp(trTarget); if c < cmin; cmin, pmin = c, reflect(timeflip(p)); end
+    b, c, l = LpRmSmLmRp!(target, c, l, p); b && (post = POST)
+    b, c, l = LpRmSmLmRp!(tTarget, c, l, p); b && (post = POST_T)
+    b, c, l = LpRmSmLmRp!(rTarget, c, l, p); b && (post = POST_R)
+    b, c, l = LpRmSmLmRp!(trTarget, c, l, p); b && (post = POST_R_T)
 
-    cmin, pmin
+    if post == POST
+        p = p[1:l]
+    elseif post == POST_T
+        p = timeflip!(p[1:l])
+    elseif post == POST_R
+        p = reflect!(p[1:l])
+    elseif post == POST_B
+        p = backwards!(p[1:l])
+    elseif post == POST_R_T
+        p = reflect!(timeflip!(p[1:l]))
+    elseif post == POST_B_T
+        p = backwards!(timeflip!(p[1:l]))
+    elseif post == POST_B_R
+        p = backwards!(reflect!(p[1:l]))
+    else
+        p = backwards!(reflect!(timeflip!(p[1:l])))
+    end
+    c, p
 end
 
 ## Where the magic happens
-function LpSpLp{T}(tx::T, ty::T, tt::T)
+function LpSpLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     r, θ = R(tx - sin(tt), ty - 1. + cos(tt))
     u = r
     t = mod2pi(θ)
     v = mod2pi(tt - t)
-    (t + u + v, [CarSegment{T}(1, t), CarSegment{T}(0, u), CarSegment{T}(1, v)])
+    cnew = t + u + v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(0, u)
+    path[3] = CarSegment{T}(1, v)
+    true, cnew, 3
 end
 
-function LpSpRp{T}(tx::T, ty::T, tt::T)
+function LpSpRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     r, θ = R(tx + sin(tt), ty - 1. - cos(tt))
-    r*r < 4. && return (Inf, CarSegment{T}[])
+    r*r < 4. && return false, c, l
     u = sqrt(r*r - 4.)
     r1, θ1 = R(u, 2.)
     t = mod2pi(θ + θ1)
     v = mod2pi(t - tt)
-    (t + u + v, [CarSegment{T}(1, t), CarSegment{T}(0, u), CarSegment{T}(-1, v)])
+    cnew = t + u + v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(0, u)
+    path[3] = CarSegment{T}(-1, v)
+    true, cnew, 3
 end
 
-function LpRmLp{T}(tx::T, ty::T, tt::T)
+function LpRmLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1.
-    E*E + N*N > 16. && return (Inf, CarSegment{T}[])
+    E*E + N*N > 16. && return false, c, l
     r, θ = R(E, N)
     u = acos(1. - r*r/8)
     t = mod2pi(θ - u/2 + pi)
     v = mod2pi(pi - u/2 - θ + tt)
     u = -u
-    (t - u + v, [CarSegment{T}(1, t), CarSegment{T}(-1, u), CarSegment{T}(1, v)])
+    cnew = t - u + v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, u)
+    path[3] = CarSegment{T}(1, v)
+    true, cnew, 3
 end
-
-function LpRmLm{T}(tx::T, ty::T, tt::T)
+    
+function LpRmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1.
-    E*E + N*N > 16. && return (Inf, CarSegment{T}[])
+    E*E + N*N > 16. && return false, c, l
     r, θ = R(E, N)
     u = acos(1. - r*r/8)
     t = mod2pi(θ - u/2 + pi)
     v = mod2pi(pi - u/2 - θ + tt) - 2pi
     u = -u
-    (t - u - v, [CarSegment{T}(1, t), CarSegment{T}(-1, u), CarSegment{T}(1, v)])
+    cnew = t - u - v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, u)
+    path[3] = CarSegment{T}(1, v)
+    true, cnew, 3
 end
-
-function LpRpuLmuRm{T}(tx::T, ty::T, tt::T)
+    
+function LpRpuLmuRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1.
     p = (2. + sqrt(E*E + N*N)) / 4.
-    (p < 0 || p > 1) && return (Inf, CarSegment{T}[])
+    (p < 0 || p > 1) && return false, c, l
     u = acos(p)
     t = mod2pi(Tau(u, -u, E, N))
     v = mod2pi(Omega(u, -u, E, N, tt)) - 2pi
-    (t + 2*u - v, [CarSegment{T}(1, t), CarSegment{T}(-1, u), CarSegment{T}(1, -u), CarSegment{T}(-1, v)])
+    cnew = t + 2*u - v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, u)
+    path[3] = CarSegment{T}(1, -u)
+    path[4] = CarSegment{T}(-1, v)
+    true, cnew, 4
 end
 
-function LpRmuLmuRp{T}(tx::T, ty::T, tt::T)
+function LpRmuLmuRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1.
     p = (20. - E*E - N*N) / 16.
-    (p < 0 || p > 1) && return (Inf, CarSegment{T}[])
+    (p < 0 || p > 1) && return false, c, l
     u = -acos(p)
     t = mod2pi(Tau(u, u, E, N))
     v = mod2pi(Omega(u, u, E, N, tt))
-    (t - 2*u + v, [CarSegment{T}(1, t), CarSegment{T}(-1, u), CarSegment{T}(1, u), CarSegment{T}(-1, v)])
+    cnew = t - 2*u + v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, u)
+    path[3] = CarSegment{T}(1, u)
+    path[4] = CarSegment{T}(-1, v)
+    true, cnew, 4
 end
 
-function LpRmSmLm{T}(tx::T, ty::T, tt::T)
+function LpRmSmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1.
     D, β = R(E, N)
-    D < 2 && return (Inf, CarSegment{T}[])
+    D < 2 && return false, c, l
     γ = acos(2/D)
     F = sqrt(D*D/4 - 1.)
     t = mod2pi(pi + β - γ)
     u = 2. - 2*F
-    u > 0 && return (Inf, CarSegment{T}[])
+    u > 0 && return false, c, l
     v = mod2pi(-3pi/2 + γ + tt - β) - 2pi
-    (t + pi/2 - u - v, [CarSegment{T}(1, t), CarSegment{T}(-1, -pi/2), CarSegment{T}(0, u), CarSegment{T}(1, v)])
+    cnew = t + pi/2 - u - v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, -pi/2)
+    path[3] = CarSegment{T}(0, u)
+    path[4] = CarSegment{T}(1, v)
+    true, cnew, 4
 end
 
-function LpRmSmRm{T}(tx::T, ty::T, tt::T)
+function LpRmSmRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1.
     D, β = R(E, N)
-    D < 2 && return (Inf, CarSegment{T}[])
+    D < 2 && return false, c, l
     t = mod2pi(β + pi/2)
     u = 2. - D
-    u > 0 && return (Inf, CarSegment{T}[])
+    u > 0 && return false, c, l
     v = mod2pi(-pi - tt + β) - 2pi
-    (t + pi/2 - u - v, [CarSegment{T}(1, t), CarSegment{T}(-1, -pi/2), CarSegment{T}(0, u), CarSegment{T}(-1, v)])
+    cnew = t + pi/2 - u - v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, -pi/2)
+    path[3] = CarSegment{T}(0, u)
+    path[4] = CarSegment{T}(-1, v)
+    true, cnew, 4
 end
-
-function LpRmSmLmRp{T}(tx::T, ty::T, tt::T)
+    
+function LpRmSmLmRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1.
     D, β = R(E, N)
-    D < 2 && return (Inf, CarSegment{T}[])
+    D < 2 && return false, c, l
     γ = acos(2/D)
     F = sqrt(D*D/4 - 1.)
     t = mod2pi(pi + β - γ)
     u = 4. - 2*F
-    u > 0 && return (Inf, CarSegment{T}[])
+    u > 0 && return false, c, l
     v = mod2pi(pi + β - tt - γ)
-    (t + pi - u + v, [CarSegment{T}(1, t), CarSegment{T}(-1, -pi/2), CarSegment{T}(0, u), CarSegment{T}(1, -pi/2), CarSegment{T}(-1, v)])
+    cnew = t + pi - u + v
+    c <= cnew && return false, c, l
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, -pi/2)
+    path[3] = CarSegment{T}(0, u)
+    path[4] = CarSegment{T}(1, -pi/2)
+    path[5] = CarSegment{T}(-1, v)
+    true, cnew, 5
 end
 
-for f in (:LpSpLp, :LpSpRp, :LpRmLp, :LpRmLm, :LpRpuLmuRm, :LpRmuLmuRp, :LpRmSmLm, :LpRmSmRm, :LpRmSmLmRp)
-    @eval $f(s::SE2State) = $f(s.x[1], s.x[2], s.t)
+for f in (:LpSpLp!, :LpSpRp!, :LpRmLp!, :LpRmLm!, :LpRpuLmuRm!, :LpRmuLmuRp!, :LpRmSmLm!, :LpRmSmRm!, :LpRmSmLmRp!)
+    @eval $f{T}(s::SE2State{T}, c::T, l::Int, p::CarPath{T}) = $f(s.x[1], s.x[2], s.t, c, l, p)
 end
