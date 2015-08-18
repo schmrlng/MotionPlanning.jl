@@ -74,86 +74,113 @@ function time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T, t
 end
 
 ### Dubins Steering Nuts and Bolts
-function dubinsLSL{T}(d::T, a::T, b::T)
+function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = 2. + d*d - 2.*(ca*cb +sa*sb - d*(sa - sb))
-    tmp < 0. && return (Inf, CarSegment{T}[])
+    tmp < 0. && return c
     th = atan2(cb - ca, d + sa - sb)
     t = mod2pi(-a + th)
     p = sqrt(max(tmp, 0.))
     q = mod2pi(b - th)
-    (t + p + q, [CarSegment{T}(1, t), CarSegment{T}(0, p), CarSegment{T}(1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(0, p)
+    path[3] = CarSegment{T}(1, q)
+    cnew
 end
 
-function dubinsRSR{T}(d::T, a::T, b::T)
+function dubinsRSR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = 2. + d*d - 2.*(ca*cb + sa*sb - d*(sb - sa))
-    tmp < 0. && return (Inf, CarSegment{T}[])
+    tmp < 0. && return c
     th = atan2(ca - cb, d - sa + sb)
     t = mod2pi(a - th)
     p = sqrt(max(tmp, 0.))
     q = mod2pi(-b + th)
-    (t + p + q, [CarSegment{T}(-1, t), CarSegment{T}(0, p), CarSegment{T}(-1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(-1, t)
+    path[2] = CarSegment{T}(0, p)
+    path[3] = CarSegment{T}(-1, q)
+    cnew
 end
 
-function dubinsRSL{T}(d::T, a::T, b::T)
+function dubinsRSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = d * d - 2. + 2. * (ca*cb + sa*sb - d * (sa + sb))
-    tmp < 0. && return (Inf, CarSegment{T}[])
+    tmp < 0. && return c
     p = sqrt(max(tmp, 0.))
     th = atan2(ca + cb, d - sa - sb) - atan2(2., p)
     t = mod2pi(a - th)
     q = mod2pi(b - th)
-    (t + p + q, [CarSegment{T}(-1, t), CarSegment{T}(0, p), CarSegment{T}(1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(-1, t)
+    path[2] = CarSegment{T}(0, p)
+    path[3] = CarSegment{T}(1, q)
+    cnew
 end
 
-function dubinsLSR{T}(d::T, a::T, b::T)
+function dubinsLSR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = -2. + d * d + 2. * (ca*cb + sa*sb + d * (sa + sb))
-    tmp < 0. && return (Inf, CarSegment{T}[])
+    tmp < 0. && return c
     p = sqrt(max(tmp, 0.))
     th = atan2(-ca - cb, d + sa + sb) - atan2(-2., p)
     t = mod2pi(-a + th)
     q = mod2pi(-b + th)
-    (t + p + q, [CarSegment{T}(1, t), CarSegment{T}(0, p), CarSegment{T}(-1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(0, p)
+    path[3] = CarSegment{T}(-1, q)
+    cnew
 end
 
-function dubinsRLR{T}(d::T, a::T, b::T)
+function dubinsRLR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = .125 * (6. - d * d  + 2. * (ca*cb + sa*sb + d * (sa - sb)))
-    abs(tmp) >= 1. && return (Inf, CarSegment{T}[])
+    abs(tmp) >= 1. && return c
     p = 2pi - acos(tmp)
     th = atan2(ca - cb, d - sa + sb)
     t = mod2pi(a - th + .5 * p)
     q = mod2pi(a - b - t + p)
-    (t + p + q, [CarSegment{T}(-1, t), CarSegment{T}(1, p), CarSegment{T}(-1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(-1, t)
+    path[2] = CarSegment{T}(1, p)
+    path[3] = CarSegment{T}(-1, q)
+    cnew
 end
 
-function dubinsLRL{T}(d::T, a::T, b::T)
+function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = .125 * (6. - d * d  + 2. * (ca*cb + sa*sb - d * (sa - sb)))
-    abs(tmp) >= 1. && return (Inf, CarSegment{T}[])
+    abs(tmp) >= 1. && return c
     p = 2pi - acos(tmp)
     th = atan2(-ca + cb, d + sa - sb)
     t = mod2pi(-a + th + .5 * p)
     q = mod2pi(b - a - t + p)
-    (t + p + q, [CarSegment{T}(1, t), CarSegment{T}(-1, p), CarSegment{T}(1, q)])
+    cnew = t + p + q
+    c <= cnew && return c
+    path[1] = CarSegment{T}(1, t)
+    path[2] = CarSegment{T}(-1, p)
+    path[3] = CarSegment{T}(1, q)
+    cnew
 end
 
 function dubins{T}(s1::SE2State{T}, s2::SE2State{T})
-    const dubinsTypes = (dubinsLSL, dubinsRSR, dubinsRSL, dubinsLSR, dubinsRLR, dubinsLRL)
+    const dubinsTypes = (dubinsLSL!, dubinsRSR!, dubinsRSL!, dubinsLSR!, dubinsRLR!, dubinsLRL!)
     v = s2.x - s1.x
     d = norm(v)
     th = atan2(v)
     a = mod2pi(s1.t - th)
     b = mod2pi(s2.t - th)
 
-    cmin, pmin = Inf, CarSegment{T}[]
-    for dubinsType in dubinsTypes
-        c, p = dubinsType(d, a, b)
-        if c < cmin
-            cmin, pmin = c, p
-        end
+    cmin, pmin = inf(T), Array(CarSegment{T}, 3)
+    for dubinsType! in dubinsTypes
+        cmin = dubinsType!(d, a, b, cmin, pmin)
     end
     cmin, pmin
 end
