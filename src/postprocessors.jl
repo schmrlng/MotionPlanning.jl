@@ -120,8 +120,14 @@ function cost_space_solution!(P::MPProblem, n)
     sol = P.solution.metadata["path"]
     total_cost = sum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in P.SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], P.SS.dist)...]])
                       for i in 1:length(sol)-1])
-    cost_discretize_solution!(P, total_cost / (n-1))
-    P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]  # could have n+1 from numerical error
+    for k in n-1:n+10
+        cost_discretize_solution!(P, total_cost / k)
+        if length(P.solution.metadata["discretized_path"]) >= n
+            P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]
+            return P.solution.metadata["discretized_path"]
+        end
+    end
+    error("Something must be seriously wrong with costs to get here; are you using reverse_penalty?")
 end
 
 ### Linear Quadratic Discretization

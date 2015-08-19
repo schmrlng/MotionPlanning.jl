@@ -187,16 +187,19 @@ colliding_ends_free(C::Compound2D, S::Line) = colliding(C,S)
 
 # ---------- Transformations ----------
 
-inflate(C::Circle, eps) = Circle(C.c, C.r + eps)
-function inflate(P::Polygon, eps)
+inflate(C::Circle, eps; roundcorners = true) = Circle(C.c, C.r + eps)
+function inflate(P::Polygon, eps; roundcorners = true)
+    push_out_corner_vector(n0, n1) = (cross(n0, n1) == 1e-6 ? n0 : (perp(n1) - perp(n0)) / cross(n0, n1))
     N = length(P.points)
     S = eltype(P.points)
+    !roundcorners && return Polygon(S[P.points[i] + eps*push_out_corner_vector(P.normals[wrap1(i-1,N)], P.normals[i]) for i in 1:N])
     Compound2D([
         Polygon(vcat([S[P.points[i] + eps*P.normals[wrap1(i-1,N)], P.points[i] + eps*P.normals[i]] for i in 1:N]...)),
         [Circle(p, eps) for p in P.points]...
     ])
+
 end
-inflate{T}(C::Compound2D{T}, eps) = Compound2D(Shape2D{T}[inflate(P, eps) for P in C.parts])
+inflate{T}(C::Compound2D{T}, eps; roundcorners = true) = Compound2D(Shape2D{T}[inflate(P, eps; roundcorners = roundcorners) for P in C.parts])
 
 # ---------- Closest Point ---------
 
