@@ -110,6 +110,61 @@ function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increa
     nbhd
 end
 
+### Quasimetric LB by Euclidean (TODO: general bounded NN, and really a redesign of everything NN)
+type QMArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
+    V::Vector{S}
+    dist::QuasiMetric
+    DS::KDTree
+    US::SparseMatrixCSC{U,Int}      # TODO: switch to a sparse matrix structure better suited for insertion, at least while populating
+    cacheF::Vector{Neighborhood{T}}
+    cacheB::Vector{Neighborhood{T}}
+    kNNrF::Vector{T}
+    kNNrB::Vector{T}
+
+    function QMArcLength_Pruned(V::Vector{S}, dist::QuasiMetric)
+        NN = new(V, dist)
+        initcache(NN)
+    end
+end
+function initcache{S,T,U}(NN::QMArcLength_Pruned{S,T,U})
+    N = length(NN.V)
+    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    NN.US = sparse([],[],U[],N,N)
+    NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
+    NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
+    NN
+end
+QMArcLength_Pruned{S<:State}(V::Vector{S}, dist::QuasiMetric) =
+    QMArcLength_Pruned{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+
+## Forwards
+
+function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
+    inds = deleteat!(inds, searchsortedfirst(inds, v))
+    ds = T[evaluate(NN.dist, NN[v], NN[i]) for i in inds]
+    @devec pruned = ds .<= r
+    Neighborhood(inds[pruned], ds[pruned])
+end
+
+function knnF(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+    error("TODO")
+end
+
+## Backwards
+
+function inballB(NN::QuasiMetricNN_BruteForce, v::Int, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
+    inds = deleteat!(inds, searchsortedfirst(inds, v))
+    ds = T[evaluate(NN.dist, NN[i], NN[v]) for i in inds]
+    @devec pruned = ds .<= r
+    Neighborhood(inds[pruned], ds[pruned])
+end
+
+function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+    error("TODO")
+end
+
 ### General Methods (HUGE TODO: learn metaprogramming)
 
 ## Forwards

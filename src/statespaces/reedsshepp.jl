@@ -80,7 +80,7 @@ function volume(SS::ReedsSheppStateSpace)
 end
 function defaultNN(SS::ReedsSheppStateSpace, init)
     V = typeof(init)[init]
-    ArcLength_Pruned(V, SS.dist)
+    QMArcLength_Pruned(V, SS.dist)
 end
 
 ### Steering Nuts and Bolts
