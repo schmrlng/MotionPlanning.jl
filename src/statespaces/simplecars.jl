@@ -1,13 +1,10 @@
-### Simple Car State Spaces
-abstract SimpleCarStateSpace <: StateSpace
+### Simple Car Typedefs
+## Basics
 immutable CarSegment{T<:FloatingPoint}
     t::Int          # segment type (L = 1, S = 0, R = -1)
     d::T            # segment length (radians for curved segments)
 end
 typealias CarPath{T} Vector{CarSegment{T}}
-
-### Waypoint Interpolation
-## Arbitrary Spacing (for CC)
 immutable CirclePoints{T<:FloatingPoint}
     r::T
     dt::T
@@ -15,7 +12,35 @@ immutable CirclePoints{T<:FloatingPoint}
 end
 CirclePoints{T}(r::T, N::Int) = CirclePoints(r, 2pi/N, [r*Vector2(cos(x), sin(x)) for x in linspace(0,2pi,N+1)[1:end-1]])
 
-function waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 16))
+## Metrics
+immutable ReedsSheppExact{T<:FloatingPoint} <: Metric
+    r::T
+    CP::CirclePoints{T}
+    p::CarPath{T}    # scratch space to avoid extra memory allocation
+
+    ReedsSheppExact(r::T, CP::CirclePoints{T}) = new(r, CP, Array(CarSegment{T}, 5))
+end
+ReedsSheppExact{T<:FloatingPoint}(r::T, CP::CirclePoints{T}) = ReedsSheppExact{T}(r, CP)
+immutable DubinsExact{T<:FloatingPoint} <: QuasiMetric
+    r::T
+    CP::CirclePoints{T}
+    p::CarPath{T}    # scratch space to avoid extra memory allocation
+
+    DubinsExact(r::T, CP::CirclePoints{T}) = new(r, CP, Array(CarSegment{T}, 3))
+end
+DubinsExact{T<:FloatingPoint}(r::T, CP::CirclePoints{T}) = DubinsExact{T}(r, CP)
+
+evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
+evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
+
+## Metric(-ish) Space Instantiation 
+ReedsSheppMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =
+    SE2StateSpace(3, lo, hi, ReedsSheppExact(r, CirclePoints(r, res)), ExtractVector())
+DubinsQuasiMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =
+    SE2StateSpace(3, lo, hi, DubinsExact(r, CirclePoints(r, res)), ExtractVector())
+
+### Waypoint Interpolation
+function workspace_waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
     s.t == 0 && return Vector2{T}[v.x, v.x+s.d*Vector2(cos(v.t), sin(v.t))]
     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
     turnpts = push!(cp.pts[1:1+ifloor(abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
@@ -26,17 +51,17 @@ function waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoi
     end
     [(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
 end
-function waypoints{T}(v::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 16))
+function workspace_waypoints{T}(v::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
     pts = Array(Vector2{T}, 0)
     for s in p
-        s_pts = waypoints(v, s, r, cp)
+        s_pts = workspace_waypoints(v, s, r, cp)
         append!(pts, s_pts[1:end-1])
         v = SE2State(s_pts[end], v.t + s.t*s.d)
     end
     push!(pts, v.x)
 end
-function waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 16), fix_w::Bool = false)
-    pts = waypoints(v, p, r, cp)
+function workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50), fix_w::Bool = false)
+    pts = workspace_waypoints(v, p, r, cp)
     if fix_w
         wx0 = pts[end]
         segment_lengths = map(norm, diff(pts))
@@ -49,6 +74,10 @@ function waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T = 1., 
     end
     pts
 end
+function workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, cp::CirclePoints{T} = RS.cp) =
+    workspace_waypoints(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, cp, false)
+function workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, cp::CirclePoints{T} = D.cp) =
+    workspace_waypoints(v, w, dubins(v, w, D.r, D.p)[2], D.r, cp, false)
 
 ## Discretized by Time
 function time_waypoint{T}(v::SE2State{T}, s::CarSegment{T}, r::T, t::T)
@@ -72,6 +101,10 @@ function time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T, t
     t > total_time && return w.x
     pt + t/total_time*(w.x - v.x)
 end
+
+### State/Motion Validity Checking
+
+
 
 ### Dubins Steering Nuts and Bolts
 function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
@@ -170,19 +203,19 @@ function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     cnew
 end
 
-function dubins{T}(s1::SE2State{T}, s2::SE2State{T})
+function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r = one(T), pmin = Array(CarSegment{T}, 3))
     const dubinsTypes = (dubinsLSL!, dubinsRSR!, dubinsRSL!, dubinsLSR!, dubinsRLR!, dubinsLRL!)
-    v = s2.x - s1.x
+    v = (s2.x - s1.x) / r
     d = norm(v)
     th = atan2(v)
     a = mod2pi(s1.t - th)
     b = mod2pi(s2.t - th)
 
-    cmin, pmin = inf(T), Array(CarSegment{T}, 3)
+    cmin = inf(T)
     for dubinsType! in dubinsTypes
         cmin = dubinsType!(d, a, b, cmin, pmin)
     end
-    cmin, pmin
+    cmin*r, rescale!(pmin, r)
 end
 
 function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
@@ -231,15 +264,23 @@ function reflect!{T}(p::CarPath{T})
     p
 end
 backwards!{T}(p::CarPath{T}) = reverse!(p)
+function rescale!{T}(p::CarPath{T}, r::T)
+    for i in 1:length(p)
+        if p[i].t == 0
+            p[i] = CarSegment{T}(0, r*p[i].d)
+        end
+    end
+    p
+end
 
 # TODO: something about an enum type in Julia v0.4?
 const POST, POST_T, POST_R, POST_B, POST_R_T, POST_B_T, POST_B_R, POST_B_R_T = 0, 1, 2, 3, 4, 5, 6, 7
 
 ## Gotta check 'em all
-function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T})
-    dx, dy = s2.x - s1.x
+function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r = one(T), p = Array(CarSegment{T}, 5))
+    dx, dy = (s2.x - s1.x) / r
     ct, st = cos(s1.t), sin(s1.t)
-    target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, s2.t - s1.t)
+    target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, mod2pi(s2.t - s1.t))
 
     tTarget = timeflip(target)
     rTarget = reflect(target)
@@ -249,7 +290,7 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T})
     brTarget = reflect(bTarget)
     btrTarget = reflect(btTarget)
     
-    c, p, l = inf(T), Array(CarSegment{T}, 5), 0
+    c, l = inf(T), 0
     # Only Tim Wheeler knows what the hell is happening down below
     # (8.1) C S C
     b, c, l = LpSpLp!(target, c, l, p); b && (post = POST)
@@ -334,7 +375,7 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T})
     else
         p = backwards!(reflect!(timeflip!(p[1:l])))
     end
-    c, p
+    c*r, rescale!(p, r)
 end
 
 ## Where the magic happens

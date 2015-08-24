@@ -11,23 +11,21 @@ immutable BallGoal{T<:FloatingPoint} <: Goal
     radius::T
 end
 
-immutable PointGoal{T<:FloatingPoint} <: Goal
-    pt::AbstractVector{T}
+immutable PointGoal <: Goal
+    pt::State
 end
 
-plot(G::RectangleGoal) = plot_rectangle(G.bounds, color = "green")
-plot(G::BallGoal) = plot_circle(G.center, G.radius, color = "green")
-plot(G::PointGoal) = scatter(G.pt[1], G.pt[2], color = "green", zorder=5)
+plot(G::RectangleGoal, SS::StateSpace) = plot_rectangle(G.bounds, color = "green")
+plot(G::BallGoal, SS::StateSpace) = plot_circle(G.center, G.radius, color = "green")
+plot(G::PointGoal, SS::StateSpace) = scatter(state2workspace(G.pt, SS)[1:2]..., color = "green", zorder=5)
 
 ## Rectangle Goal
-
-is_goal_pt(v::State, G::RectangleGoal) = all(G.bounds[:,1] .<= convert(Vector{eltype(v)}, v) .<= G.bounds[:,2])        # TODO: something principled with conversion
-sample_goal(G::RectangleGoal) = (G.bounds[:,1] + (G.bounds[:,2] - G.bounds[:,1]).*rand(size(G.bounds,1)))
+is_goal_pt(v::State, G::RectangleGoal, SS::StateSpace) = all(G.bounds[:,1] .<= state2workspace(v, SS) .<= G.bounds[:,2])
+sample_goal(G::RectangleGoal) = (G.bounds[:,1] + (G.bounds[:,2] - G.bounds[:,1]).*rand(size(G.bounds,1)))  # TODO: workspace2state
 
 ## Ball Goal
-
-is_goal_pt(v::State, G::BallGoal) = (norm(convert(Vector{eltype(v)}, v) - G.center) <= G.radius)
-function sample_goal(G::BallGoal)
+is_goal_pt(v::State, G::BallGoal, SS::StateSpace) = (norm(convert(typeof(G.center), state2workspace(v, SS)) - G.center) <= G.radius)
+function sample_goal(G::BallGoal)    # TODO: workspace2state
     while true
         v = G.center + 2*G.radius*(convert(typeof(G.center), rand(length(G.center))) - .5)
         if is_goal_pt(v, G)
@@ -37,6 +35,5 @@ function sample_goal(G::BallGoal)
 end
 
 ## Point Goal
-
-is_goal_pt(v::State, G::PointGoal) = (convert(Vector{eltype(v)}, v) == G.pt)
-sample_goal(G::PointGoal) = G.pt
+is_goal_pt(v::State, G::PointGoal) = (v == G.pt)
+sample_goal(G::PointGoal, SS::StateSpace) = G.pt

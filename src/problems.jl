@@ -39,7 +39,7 @@ end
 function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
     SS && plot(P.SS)
     CC && plot(P.CC, P.SS.lo, P.SS.hi)
-    goal && plot(P.goal)
+    goal && plot(P.goal, P.SS)
     if isdefined(P, :solution)
         S = P.solution
         if meta

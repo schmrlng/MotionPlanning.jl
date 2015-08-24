@@ -1,9 +1,9 @@
 export sample_free_goal, sample_free!
 
 function sample_free_goal(P::MPProblem)
-    v = vector_to_state(sample_goal(P.goal), P.SS)
+    v = sample_goal(P.goal, P.SS)
     while ~is_free_state(v, P.CC, P.SS)
-        v = vector_to_state(sample_goal(P.goal), P.SS)
+        v = sample_goal(P.goal, P.SS)
     end
     return v
 end
