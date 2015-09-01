@@ -1,4 +1,4 @@
-import Base: getindex, eltype, convert
+import Base: getindex, eltype, convert, hcat
 
 ### Planning Primitives
 export AbstractState, State, Path
@@ -28,3 +28,11 @@ end
 eltype{T}(::SE2State{T}) = T
 eltype{T}(::Type{SE2State{T}}) = T
 convert{T}(::Type{Vector{T}}, s::SE2State{T}) = convert(Vector{T}, s.x)  # TODO: a dangerous default; should be eliminated
+hcat(X::SE2State...) = hcat([X[i].x for i in 1:length(X)]...)             # TODO: also sort of weird, but very useful
+
+### Abstract State Space Typedefs
+export StateSpace, State2Workspace, QuasiMetric
+
+abstract StateSpace
+abstract State2Workspace
+abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and triangle inequality (no symmetry)

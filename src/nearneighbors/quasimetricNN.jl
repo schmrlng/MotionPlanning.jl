@@ -139,7 +139,7 @@ QMArcLength_Pruned{S<:State}(V::Vector{S}, dist::QuasiMetric) =
 
 ## Forwards
 
-function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
+function inballF{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
     ds = T[evaluate(NN.dist, NN[v], NN[i]) for i in inds]
@@ -147,13 +147,13 @@ function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
     Neighborhood(inds[pruned], ds[pruned])
 end
 
-function knnF(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+function knnF{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::Int, k = 1)    # ds sorted increasing
     error("TODO")
 end
 
 ## Backwards
 
-function inballB(NN::QuasiMetricNN_BruteForce, v::Int, r)
+function inballB{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
     ds = T[evaluate(NN.dist, NN[i], NN[v]) for i in inds]
@@ -161,7 +161,7 @@ function inballB(NN::QuasiMetricNN_BruteForce, v::Int, r)
     Neighborhood(inds[pruned], ds[pruned])
 end
 
-function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
+function knnB{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::Int, k = 1)    # ds sorted increasing
     error("TODO")
 end
 

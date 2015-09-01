@@ -11,8 +11,8 @@ immutable BallGoal{T<:FloatingPoint} <: Goal
     radius::T
 end
 
-immutable PointGoal <: Goal
-    pt::State
+immutable PointGoal{S<:State} <: Goal
+    pt::S
 end
 
 plot(G::RectangleGoal, SS::StateSpace) = plot_rectangle(G.bounds, color = "green")

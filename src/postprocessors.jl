@@ -65,38 +65,38 @@ end
 
 ### Reeds-Shepp fix inexact steering (okay not really) and discretize
 
-function smooth_waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, dx)
-    s.t == 0 && return Vector2{T}[v.x + a*Vector2(cos(v.t), sin(v.t)) for a in linspace(0, abs(s.d), iceil(abs(s.d)/dx)+1)]
-    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-    turnpts = [r*Vector2(cos(x), sin(x)) for x in linspace(0, abs(s.d), iceil(r*abs(s.d)/dx)+1)]
-    if s.t*s.d < 0
-        for i in 1:length(turnpts)      # manual @devec
-            turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
-        end
-    end
-    [(center + sign(s.t)*MotionPlanning.rotate(p, v.t-pi/2)) for p in turnpts]
-end
-function smooth_waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, dx)
-    pts = Array(Vector2{T}, 0)
-    for s in SS.dist.paths[MotionPlanning.RSvec2sub(v, w, SS.dist)...]
-        s_pts = smooth_waypoints(v, s, SS.r, dx)
-        append!(pts, s_pts[1:end-1])
-        v = RSState(s_pts[end], v.t + s.t*s.d)
-    end
-    scale_factor = (w.x - pts[1]) ./ (v.x - pts[1])
-    pts = [(scale_factor.*(p - pts[1]) + pts[1]) for p in pts]
-    push!(pts, w.x)
-end
-smooth_waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, dx) = smooth_waypoints(NN[i], NN[j], SS, dx)
+# function smooth_waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, dx)
+#     s.t == 0 && return Vector2{T}[v.x + a*Vector2(cos(v.t), sin(v.t)) for a in linspace(0, abs(s.d), iceil(abs(s.d)/dx)+1)]
+#     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
+#     turnpts = [r*Vector2(cos(x), sin(x)) for x in linspace(0, abs(s.d), iceil(r*abs(s.d)/dx)+1)]
+#     if s.t*s.d < 0
+#         for i in 1:length(turnpts)      # manual @devec
+#             turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
+#         end
+#     end
+#     [(center + sign(s.t)*MotionPlanning.rotate(p, v.t-pi/2)) for p in turnpts]
+# end
+# function smooth_waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, dx)
+#     pts = Array(Vector2{T}, 0)
+#     for s in SS.dist.paths[MotionPlanning.RSvec2sub(v, w, SS.dist)...]
+#         s_pts = smooth_waypoints(v, s, SS.r, dx)
+#         append!(pts, s_pts[1:end-1])
+#         v = RSState(s_pts[end], v.t + s.t*s.d)
+#     end
+#     scale_factor = (w.x - pts[1]) ./ (v.x - pts[1])
+#     pts = [(scale_factor.*(p - pts[1]) + pts[1]) for p in pts]
+#     push!(pts, w.x)
+# end
+# smooth_waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, dx) = smooth_waypoints(NN[i], NN[j], SS, dx)
 
-function RSsmooth_and_discretize!(P::MPProblem, dx)
-    (!isa(P.SS, ReedsSheppStateSpace) || P.status != :solved) && error("RSsmooth_and_discretize only works for solved Reeds-Shepp problems!")
-    sol = P.solution.metadata["path"]
-    dpath = vcat([smooth_waypoints(sol[i], sol[i+1], P.V, P.SS, dx)[1:end-1] for i in 1:length(sol)-1]...)
-    push!(dpath, P.V[sol[end]].x)
-    dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
-    P.solution.metadata["smoothed_path"] = dpath
-end
+# function RSsmooth_and_discretize!(P::MPProblem, dx)
+#     (!isa(P.SS, ReedsSheppStateSpace) || P.status != :solved) && error("RSsmooth_and_discretize only works for solved Reeds-Shepp problems!")
+#     sol = P.solution.metadata["path"]
+#     dpath = vcat([smooth_waypoints(sol[i], sol[i+1], P.V, P.SS, dx)[1:end-1] for i in 1:length(sol)-1]...)
+#     push!(dpath, P.V[sol[end]].x)
+#     dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
+#     P.solution.metadata["smoothed_path"] = dpath
+# end
 
 function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
     sol = P.solution.metadata["path"]
@@ -132,16 +132,16 @@ end
 
 ### Linear Quadratic Discretization
 
-function discretize_path(pidx, dt, NN::NearNeighborCache, SS::LinearQuadraticStateSpace)
-    dpath = NN.V[[pidx[1]]]
-    for i in 2:length(pidx)
-        segment_length = NN.US[pidx[i-1],pidx[i]].t
-        M = iceil(segment_length / dt) + 1
-        wps = statepoints(pidx[i-1], pidx[i], NN, SS, M)
-        append!(dpath, wps[2:end])
-    end
-    dpath
-end
+# function discretize_path(pidx, dt, NN::NearNeighborCache, SS::LinearQuadraticStateSpace)
+#     dpath = NN.V[[pidx[1]]]
+#     for i in 2:length(pidx)
+#         segment_length = NN.US[pidx[i-1],pidx[i]].t
+#         M = iceil(segment_length / dt) + 1
+#         wps = statepoints(pidx[i-1], pidx[i], NN, SS, M)
+#         append!(dpath, wps[2:end])
+#     end
+#     dpath
+# end
 
 ### General (should perhaps not live in this package?)
 

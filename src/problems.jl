@@ -36,6 +36,9 @@ function copy(P::MPProblem)
     Pcopy
 end
 
+plot_path(SS::StateSpace, V::NearNeighborCache, sol; kwargs...) = plot_path(V[sol], SS; kwargs...)
+plot_tree(SS::StateSpace, V::NearNeighborCache, A; kwargs...) = plot_tree(V.V, A, SS; kwargs...)
+
 function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
     SS && plot(P.SS)
     CC && plot(P.CC, P.SS.lo, P.SS.hi)
