@@ -74,11 +74,11 @@ end
 #             turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
 #         end
 #     end
-#     [(center + sign(s.t)*MotionPlanning.rotate(p, v.t-pi/2)) for p in turnpts]
+#     [(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
 # end
 # function smooth_waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, dx)
 #     pts = Array(Vector2{T}, 0)
-#     for s in SS.dist.paths[MotionPlanning.RSvec2sub(v, w, SS.dist)...]
+#     for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
 #         s_pts = smooth_waypoints(v, s, SS.r, dx)
 #         append!(pts, s_pts[1:end-1])
 #         v = RSState(s_pts[end], v.t + s.t*s.d)
@@ -106,7 +106,7 @@ function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discret
     c = dc
     for i in 1:length(sol)-1
         while c < costs[i+1]
-            push!(dpath, state2workspace(MotionPlanning.cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]), P.SS))
+            push!(dpath, state2workspace(cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]), P.SS))
             c = c + dc
         end
     end

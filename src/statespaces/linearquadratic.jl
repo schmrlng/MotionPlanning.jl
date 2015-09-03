@@ -74,7 +74,7 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V
     broadcast!(.-, cd, 1, cd)
 
     IS, JS = findn(cd .> 0)
-    VTS = [MotionPlanning.steer(dist.BVP, V[i], W[j], t) for (i,j) in zip(IS, JS)]
+    VTS = [steer(dist.BVP, V[i], W[j], t) for (i,j) in zip(IS, JS)]
     II = find(T[v for (v,t) in VTS] .<= t)
     DS = sparse(IS[II], JS[II], T[v for (v,t) in VTS[II]], N, N)
     for i in 1:N

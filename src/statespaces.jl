@@ -91,7 +91,12 @@ workspace_waypoints(v::State, w::State, d::PreMetric, s2w::State2Workspace) = [s
 collision_waypoints(v::State, w::State, d::PreMetric, s2w::State2Workspace) = workspace_waypoints(v, w, d, s2w)
 
 ### Validity Checking
-inbounds(v::AbstractVector, SS::StateSpace) = (SS.lo[1] < v[1] < SS.hi[1] && SS.lo[2] < v[2] < SS.hi[2])
+function inbounds(v::AbstractVector, SS::StateSpace)
+    for i in 1:length(v)
+        (SS.lo[i] > v[i] || v[i] > SS.hi[i]) && return false
+    end
+    true
+end
 inbounds(v::SE2State, SS::SE2StateSpace) = (SS.lo[1] < v.x[1] < SS.hi[1] && SS.lo[2] < v.x[2] < SS.hi[2])
 is_free_state(v::State, CC::CollisionChecker, SS::StateSpace) = inbounds(v, SS) && is_free_state(state2workspace(v, SS), CC)
 function is_free_motion(v::State, w::State, CC::CollisionChecker, SS::StateSpace)
