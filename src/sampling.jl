@@ -8,7 +8,7 @@ function sample_free_goal(P::MPProblem)
     return v
 end
 
-function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_bias = 0.0)
+function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true; goal_bias = 0.0, ensure_goal_ct = 5)
     N == 0 && return volume(P.SS)
     V = P.V.V
     W = Array(eltype(V), N)
@@ -35,7 +35,11 @@ function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_b
             end
         end
     end
-    ensure_goal && (W[N] = sample_free_goal(P))
+    if ensure_goal
+        for i in 1:min(ensure_goal_ct, N-1)
+            W[N+1-i] = sample_free_goal(P)
+        end
+    end
     P.V = addpoints(P.V, W)
     return volume(P.SS) #ci(BinomialTest(successes, attempts), .05, tail = :left)[2] * volume(P.SS)
 end

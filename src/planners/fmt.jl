@@ -5,6 +5,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
                                         connections::Symbol = :R,
                                         k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1),
                                         r = 0.,
+                                        ensure_goal_ct = 1,
                                         checkpts = true)  # TODO: bleh, prefer false
     tic()
     P.CC.count = 0
@@ -20,7 +21,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         error("Connection type must be radial (:R) or k-nearest (:K)")
     end
     r > 0 && setup_steering(P.SS, r)
-    free_volume_ub = sample_free!(P, N - length(P.V))  # TODO: clean this logic up
+    free_volume_ub = sample_free!(P, N - length(P.V), ensure_goal_ct = ensure_goal_ct)  # TODO: clean this logic up
     if checkpts
         F = trues(N)
         for i in 1:N
