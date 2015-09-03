@@ -40,7 +40,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     HHeap = CollectionsJ4.PriorityQueue([1], [0.])
     z = CollectionsJ4.dequeue!(HHeap)    # i.e. z = 1
 
-    while ~is_goal_pt(P.V[z], P.goal)
+    while !is_goal_pt(P.V[z], P.goal, P.SS)
         H_new = Int[]
         for x in (connections == :R ? nearF(P.V, z, r, W).inds : nearF(P.V, z, k, W).inds)
             checkpts && !F[x] && continue
@@ -71,7 +71,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         unshift!(costs, C[sol[1]])
     end
 
-    P.status = is_goal_pt(P.V[z], P.goal) ? :solved : :failed
+    P.status = is_goal_pt(P.V[z], P.goal, P.SS) ? :solved : :failed
     solution_metadata = {
         "radius_multiplier" => rm,
         "collision_checks" => P.CC.count,
@@ -79,7 +79,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         "cost" => C[z],
         "cumcost" => costs,
         "planner" => "FMTstar",
-        "solved" => is_goal_pt(P.V[z], P.goal),
+        "solved" => is_goal_pt(P.V[z], P.goal, P.SS),
         "tree" => A,
         "path" => sol
     }

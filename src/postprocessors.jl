@@ -17,7 +17,7 @@ end
 function cut_corner(v1::AbstractVector, v2::AbstractVector, v3::AbstractVector, CC::CollisionChecker)
     m1 = (v1 + v2)/2
     m2 = (v3 + v2)/2
-    while ~is_free_motion(m1, m2, CC)
+    while !is_free_motion(m1, m2, CC)
         m1 = (m1 + v2)/2
         m2 = (m2 + v2)/2
     end
@@ -100,15 +100,13 @@ end
 
 function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
     sol = P.solution.metadata["path"]
-    costs = cumsum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in P.SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], P.SS.dist)...]])
-                    for i in 1:length(sol)-1])
-    unshift!(costs, 0.)
+    costs = P.solution.metadata["cumcost"]
     x0 = state2workspace(P.V[sol[1]], P.SS)
     dpath = typeof(x0)[x0]
     c = dc
     for i in 1:length(sol)-1
         while c < costs[i+1]
-            push!(dpath, cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]))
+            push!(dpath, state2workspace(MotionPlanning.cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]), P.SS))
             c = c + dc
         end
     end
@@ -117,17 +115,14 @@ function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discret
 end
 
 function cost_space_solution!(P::MPProblem, n)
-    sol = P.solution.metadata["path"]
-    total_cost = sum([sum([s.t == 0 ? s.d : s.d*P.SS.r for s in P.SS.dist.paths[RSvec2sub(P.V[sol[i]], P.V[sol[i+1]], P.SS.dist)...]])
-                      for i in 1:length(sol)-1])
     for k in n-1:n+10
-        cost_discretize_solution!(P, total_cost / k)
+        cost_discretize_solution!(P, P.solution.cost / k)
         if length(P.solution.metadata["discretized_path"]) >= n
             P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]
             return P.solution.metadata["discretized_path"]
         end
     end
-    error("Something must be seriously wrong with costs to get here; are you using reverse_penalty?")
+    error("Something must be seriously wrong with costs to get here...")
 end
 
 ### Linear Quadratic Discretization

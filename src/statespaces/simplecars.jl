@@ -31,6 +31,7 @@ immutable DubinsExact{T<:FloatingPoint} <: QuasiMetric
     DubinsExact(r::T, CP::CirclePoints{T}) = new(r, CP, Array(CarSegment{T}, 3))
 end
 DubinsExact{T<:FloatingPoint}(r::T, CP::CirclePoints{T}) = DubinsExact{T}(r, CP)
+typealias SimpleCarMetric{T} Union(ReedsSheppExact{T}, DubinsExact{T})
 
 evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
 evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
@@ -55,7 +56,7 @@ function waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoi
         end
     end
     pts = Vector2{T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
-    thetas = push!([v.t + i*s.t*CP.dt for i in 0:ifloor(abs(s.d)/cp.dt)], v.t + s.t*s.d)  # TODO: this whole method is hacky/suboptimal for now, see CirclePoints note
+    thetas = push!([v.t + i*sign(s.d)*s.t*cp.dt for i in 0:ifloor(abs(s.d)/cp.dt)], v.t + s.t*s.d)  # TODO: this whole method is hacky/suboptimal for now, see CirclePoints note
     [SE2State{T}(p,t) for (p,t) in zip(pts, thetas)]
 end
 function waypoints{T}(v::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
@@ -76,6 +77,10 @@ function waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T = 1., 
     end
     pts
 end
+waypoints{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, cp::CirclePoints{T} = CirclePoints(RS.r, 50)) =
+    waypoints(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, cp)
+waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, cp::CirclePoints{T} = CirclePoints(D.r, 50)) =
+    waypoints(v, w, dubins(v, w, D.r, D.p)[2], D.r, cp)
 
 ## Special Cases for collision_waypoints and workspace_waypoints
 # ExtractVector (Planar Position)
@@ -124,31 +129,37 @@ collision_waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, s2w::S
 
 ## Discretized by Time
 function time_waypoint{T}(v::SE2State{T}, s::CarSegment{T}, r::T, t::T)
-    s.t == 0 && return v.x + min(t, s.d)*Vector2(cos(v.t), sin(v.t))
+    s.t == 0 && return SE2State{T}(v.x + sign(s.d)*min(t, abs(s.d))*Vector2(cos(v.t), sin(v.t)), v.t)
     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
     th = min(t/r, abs(s.d))
     turnpt = s.t*s.d > 0 ? Vector2(r*cos(th), r*sin(th)) : Vector2(r*cos(th), -r*sin(th))
-    center + sign(s.t)*rotate(turnpt, v.t-pi/2)
+    SE2State{T}(center + sign(s.t)*rotate(turnpt, v.t-pi/2), v.t + sign(s.d)*s.t*th)
 end
-function time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T, t::T)
-    pt = w
-    total_time = 0    # should be similar to the cost of p, up to endpoint-fixing stuff
+function time_waypoint{T}(v::SE2State{T}, p::CarPath{T}, r::T, t::T)
+    total_time = 0
     for s in p
         segment_time = s.t == 0 ? abs(s.d) : r*abs(s.d)
         if total_time <= t < total_time + segment_time
-            pt = time_waypoint(v, s, r, t - total_time)
+            return time_waypoint(v, s, r, t - total_time)
         end
         total_time = total_time + segment_time
-        v = SE2State(time_waypoint(v, s, r, Inf), v.t + s.t*s.d)
+        v = time_waypoint(v, s, r, Inf)
     end
-    t > total_time && return w.x
-    pt + t/total_time*(w.x - v.x)
+    v   # the case that t > total_time
 end
+function time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T, t::T, fix_w::Bool = false)
+    # fix_w && return SE2State{T}(pt.x + t/sum([s.t == 0 ? abs(s.d) : r*abs(s.d) for s in p])*(w.x - v.x), pt.t)
+    fix_w && error("TODO: this code is all temporary anyway, so I won't implement this right now.")
+    time_waypoint(v, p, r, t)
+end
+time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, t::T) = time_waypoint(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, t)
+time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, t::T) = time_waypoint(v, w, dubins(v, w, D.r, D.p)[2], D.r, t)
+cost_waypoint{T}(v::SE2State{T}, w::SE2State{T}, M::SimpleCarMetric{T}, c::T) = time_waypoint(v, w, M, c)
 
 ### Dubins Steering Nuts and Bolts
 function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
-    tmp = 2. + d*d - 2.*(ca*cb +sa*sb - d*(sa - sb))
+    tmp = 2. + d*d - 2.*(ca*cb + sa*sb - d*(sa - sb))
     tmp < 0. && return c
     th = atan2(cb - ca, d + sa - sb)
     t = mod2pi(-a + th)
