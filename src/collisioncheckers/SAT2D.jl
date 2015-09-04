@@ -189,7 +189,7 @@ colliding_ends_free(C::Compound2D, S::Line) = colliding(C,S)
 
 inflate(C::Circle, eps; roundcorners = true) = Circle(C.c, C.r + eps)
 function inflate(P::Polygon, eps; roundcorners = true)
-    push_out_corner_vector(n0, n1) = (cross(n0, n1) == 1e-6 ? n0 : (perp(n1) - perp(n0)) / cross(n0, n1))
+    push_out_corner_vector(n0, n1) = (abs(cross(n0, n1)) < 1e-6 ? n0 : (perp(n1) - perp(n0)) / cross(n0, n1))
     N = length(P.points)
     S = eltype(P.points)
     !roundcorners && return Polygon(S[P.points[i] + eps*push_out_corner_vector(P.normals[wrap1(i-1,N)], P.normals[i]) for i in 1:N])
