@@ -43,14 +43,15 @@ end
 type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
     V::Vector{S}
     dist::Metric
+    init::S
     DS::KDTree
     US::Nothing
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
 
-    function EuclideanNN_KDTree(V::Vector{S}, dist::Metric = Euclidean())
+    function EuclideanNN_KDTree(V::Vector{S}, dist::Metric, init::S)
         dist != Euclidean() && error("Distance metric must be Euclidean for EuclideanNN_KDTree")
-        NN = new(V, Euclidean())
+        NN = new(V, Euclidean(), init)
         initcache(NN)
     end
 end
@@ -61,8 +62,8 @@ function initcache{S,T,U}(NN::EuclideanNN_KDTree{S,T,U})
     NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
-EuclideanNN_KDTree{S<:AbstractVector}(V::Vector{S}, dist::Metric = Euclidean()) =
-    EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+EuclideanNN_KDTree{S<:AbstractVector}(V::Vector{S}, dist::Metric, init::S) =
+    EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist,init) # so constructor works without {}
 
 function inball{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)

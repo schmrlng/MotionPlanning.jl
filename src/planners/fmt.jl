@@ -6,11 +6,11 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
                                         k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1),
                                         r = 0.,
                                         ensure_goal_ct = 1,
+                                        init_idx = 1,
                                         checkpts = true)  # TODO: bleh, prefer false
     tic()
     P.CC.count = 0
 
-    # TODO: staged functions (Julia v0.4) for knn vs ball... or something clever in v0.3
     if connections == :R
         nearF = inballF!
         nearB = inballB!
@@ -28,18 +28,36 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
             F[i] = is_free_state(P.V[i], P.CC, P.SS)
         end
     end
-    dim = P.SS.dim
-    if r == 0.
+    if r == 0.             # TODO: this default connection radius only really applies for geometric planning
+        dim = P.SS.dim     # in particular, state space dimension here should come from the metric instead
         r = rm*2*(1/dim*free_volume_ub/(pi^(dim/2)/gamma(dim/2+1))*log(N)/N)^(1/dim)
         setup_steering(P.SS, r)
     end
 
     A = zeros(Int,N)
-    W = trues(N); W[1] = false
-    H = falses(N); H[1] = true
+    W = trues(N)
+    H = falses(N)
     C = zeros(Float64,N)
-    HHeap = CollectionsJ4.PriorityQueue([1], [0.])
-    z = CollectionsJ4.dequeue!(HHeap)    # i.e. z = 1
+    P.V.init = P.init
+    if P.V[init_idx] == P.init
+        W[init_idx] = false
+        H[init_idx] = true
+        HHeap = CollectionsJ4.PriorityQueue([init_idx], [0.])
+    else    # special casing the first expansion round of FMT if P.init is not in the sample set
+        HHeap = CollectionsJ4.PriorityQueue(Int[], Float64[])
+        neighborhood = (connections == :R ? inballF(P.V, P.init, r) : knnF(P.V, P.init, r))
+        for ii in 1:length(neighborhood.inds)
+            x, c = neighborhood.inds[ii], neighborhood.ds[ii]
+            if is_free_motion(P.init, P.V[x], P.CC, P.SS)
+                A[x] = 0
+                C[x] = c
+                HHeap[x] = c
+                H[x] = true
+                W[x] = false
+            end
+        end
+    end
+    z = CollectionsJ4.dequeue!(HHeap)    # i.e. z = init_idx
 
     while !is_goal_pt(P.V[z], P.goal, P.SS)
         H_new = Int[]
@@ -69,6 +87,10 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     costs = [C[z]]
     while sol[1] != 1
         unshift!(sol, A[sol[1]])
+        if sol[1] == 0
+            unshift!(costs, 0.)
+            break
+        end
         unshift!(costs, C[sol[1]])
     end
 

@@ -1,6 +1,6 @@
 import Base.length, Base.getindex
-export NearNeighborCache, MetricNN, QuasiMetricNN, Neighborhood, ControlInfo, NullControl, NNDatastructureCache
-export filter_neighborhood, addpoints, initcache, controltype, saveNN, loadNN!
+export NearNeighborCache, MetricNN, QuasiMetricNN, Neighborhood, NNDatastructureCache
+export filter_neighborhood, addpoints, initcache, saveNN, loadNN!
 export inball, knn, inball!, knn!, mutualknn!         # for metrics only (symmetric)
 export inballF, knnF, inballF!, knnF!, mutualknnF!    # forwards
 export inballB, knnB, inballB!, knnB!, mutualknnB!    # backwards
@@ -9,19 +9,16 @@ abstract NearNeighborCache
 abstract MetricNN <: NearNeighborCache
 abstract QuasiMetricNN <: NearNeighborCache
 
-abstract ControlInfo
-type NullControl <: ControlInfo end
-
 type Neighborhood{T<:FloatingPoint}
     inds::Vector{Int}
     ds::Vector{T}
 end
-filter_neighborhood(n::Neighborhood, f::BitVector) = Neighborhood(n.inds[f[n.inds]], n.ds[f[n.inds]])
+filter_neighborhood(n::Neighborhood, f::BitVector) = Neighborhood(n.inds[f[n.inds]], n.ds[f[n.inds]])  # TODO: this is slow (for loop to get rid of double-scan, or perhaps best, use an iterator)
 
-controltype(d::PreMetric) = NullControl
-addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V, W], NN.dist)
+addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V, W], NN.dist, NN.init)
 length(NN::NearNeighborCache) = length(NN.V)
-getindex(NN::NearNeighborCache, i) = NN.V[i]
+getindex(NN::NearNeighborCache, i::Int) = i > 0 ? NN.V[i] : NN.init
+getindex(NN::NearNeighborCache, I::AbstractVector) = [NN[i] for i in I]
 
 type NNDatastructureCache
     V

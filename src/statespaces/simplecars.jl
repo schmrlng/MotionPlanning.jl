@@ -35,8 +35,8 @@ typealias SimpleCarMetric{T} Union(ReedsSheppExact{T}, DubinsExact{T})
 
 evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
 evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
-defaultNN(RS::ReedsSheppExact, init::SE2State) = ArcLength_Pruned(typeof(init)[init], RS)  # TODO: abstract ALB_Metric
-defaultNN(D::DubinsExact, init::SE2State) = QMArcLength_Pruned(typeof(init)[init], D)
+defaultNN(RS::ReedsSheppExact, init::SE2State) = ArcLength_Pruned(typeof(init)[], RS, init)  # TODO: abstract ALB_Metric
+defaultNN(D::DubinsExact, init::SE2State) = QMArcLength_Pruned(typeof(init)[], D, init)
 
 ## Metric(-ish) Space Instantiation 
 ReedsSheppMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =

@@ -1,7 +1,7 @@
 export RealVectorStateSpace, SE2StateSpace
 export Identity, VectorView, First2Vector2, Select2Vector2, ExtractVector
 export sample_space, state2workspace, waypoints, workspace_waypoints, collision_waypoints, time_waypoint, cost_waypoint
-export inbounds, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering
+export inbounds, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering, controltype
 import Distances: evaluate
 
 #====================== Implementation Notes ======================
@@ -18,7 +18,8 @@ Optionally, to improve performance, the user may specify:
 3. collision_waypoints(v, w, M, s2w)    (i.e. a sparser version of workspace_waypoints)
 
 In rare circumstances, the user might need to specify:
-1. setup_steering
+1. setup_steering(SS, r)
+2. controltype(M)
 
 ==================================================================#
 
@@ -78,6 +79,7 @@ workspace2state(w::AbstractVector, v::SE2State, s2w::ExtractVector) = SE2State(V
 
 ### Waypoints
 setup_steering(SS::StateSpace, r) = nothing
+controltype(d::PreMetric) = NullControl
 
 waypoints{S<:State}(v::S, w::S, SS::StateSpace) = waypoints(v, w, SS.dist)
 time_waypoint{S<:State}(v::S, w::S, SS::StateSpace, t) = time_waypoint(v, w, SS.dist, t)

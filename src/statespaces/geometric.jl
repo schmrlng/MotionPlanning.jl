@@ -10,4 +10,4 @@ function time_waypoint{S}(v::S, w::S, M::Euclidean, t)
     v + min(t/n, 1)*(w - v)
 end
 cost_waypoint{S}(v::S, w::S, M::Euclidean, c) = time_waypoint(v, w, M, c)
-defaultNN(::Euclidean, init) = EuclideanNN_KDTree(typeof(init)[init])
+defaultNN(::Euclidean, init) = EuclideanNN_KDTree(typeof(init)[], Euclidean(), init)

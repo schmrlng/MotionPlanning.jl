@@ -114,6 +114,7 @@ end
 type QMArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
     dist::QuasiMetric
+    init::S
     DS::KDTree
     US::SparseMatrixCSC{U,Int}      # TODO: switch to a sparse matrix structure better suited for insertion, at least while populating
     cacheF::Vector{Neighborhood{T}}
@@ -121,23 +122,30 @@ type QMArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetric
     kNNrF::Vector{T}
     kNNrB::Vector{T}
 
-    function QMArcLength_Pruned(V::Vector{S}, dist::QuasiMetric)
-        NN = new(V, dist)
+    function QMArcLength_Pruned(V::Vector{S}, dist::QuasiMetric, init::S)
+        NN = new(V, dist, init)
         initcache(NN)
     end
 end
 function initcache{S,T,U}(NN::QMArcLength_Pruned{S,T,U})
     N = length(NN.V)
-    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    N > 0 && (NN.DS = KDTree(hcat(NN.V...)))  # TODO: leafsize, reorder?
     NN.US = sparse([],[],U[],N,N)
     NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
     NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
-QMArcLength_Pruned{S<:State}(V::Vector{S}, dist::QuasiMetric) =
-    QMArcLength_Pruned{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+QMArcLength_Pruned{S<:State}(V::Vector{S}, dist::QuasiMetric, init::S) =
+    QMArcLength_Pruned{S,eltype(S),controltype(dist)}(V,dist,init) # so constructor works without {}
 
 ## Forwards
+
+function inballF{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::S, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, v), r, true)
+    ds = T[evaluate(NN.dist, v, NN[i]) for i in inds]
+    @devec pruned = ds .<= r
+    Neighborhood(inds[pruned], ds[pruned])
+end
 
 function inballF{S,T,U}(NN::QMArcLength_Pruned{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
