@@ -21,6 +21,12 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         error("Connection type must be radial (:R) or k-nearest (:K)")
     end
     r > 0 && setup_steering(P.SS, r)
+    if !is_free_state(P.init, P.CC, P.SS)
+        warn("Initial state is infeasible!")
+        P.status = :failed
+        P.solution = MPSolution(P.status, Inf, toq(), {})
+        return Inf
+    end
     free_volume_ub = sample_free!(P, N - length(P.V), ensure_goal_ct = ensure_goal_ct)  # TODO: clean this logic up
     if checkpts
         F = trues(N)
