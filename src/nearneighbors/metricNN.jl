@@ -57,13 +57,18 @@ type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: Me
 end
 function initcache{S,T,U}(NN::EuclideanNN_KDTree{S,T,U})
     N = length(NN.V)
-    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    N > 0 && (NN.DS = KDTree(hcat(NN.V...)))  # TODO: leafsize, reorder?
     NN.US = nothing
     NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
 EuclideanNN_KDTree{S<:AbstractVector}(V::Vector{S}, dist::Metric, init::S) =
     EuclideanNN_KDTree{S,eltype(S),controltype(dist)}(V,dist,init) # so constructor works without {}
+
+function inball{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::S, r)
+    inds = KDTrees.inball(NN.DS, convert(Vector{T}, v), r, true)
+    Neighborhood(inds, colwise(Euclidean(), v, hcat(NN[inds]...)))
+end
 
 function inball{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, r)
     inds = KDTrees.inball(NN.DS, convert(Vector{T}, NN[v]), r, true)
@@ -94,7 +99,7 @@ type ArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
 end
 function initcache{S,T,U}(NN::ArcLength_Pruned{S,T,U})
     N = length(NN.V)
-    NN.DS = KDTree(hcat(NN.V...))  # TODO: leafsize, reorder?
+    N > 0 && (NN.DS = KDTree(hcat(NN.V...)))  # TODO: leafsize, reorder?
     NN.US = sparse([],[],U[],N,N)
     NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
     NN

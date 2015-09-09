@@ -1,5 +1,5 @@
 export RealVectorStateSpace, SE2StateSpace
-export Identity, VectorView, First2Vector2, Select2Vector2, ExtractVector
+export Identity, VectorView, First2Vector2, Select2Vector2, OutputMatrix, ExtractVector
 export sample_space, state2workspace, waypoints, workspace_waypoints, collision_waypoints, time_waypoint, cost_waypoint
 export inbounds, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering, controltype
 import Distances: evaluate
@@ -58,12 +58,16 @@ type Select2Vector2 <: State2Workspace
     a::Int
     b::Int
 end
+type OutputMatrix{T<:FloatingPoint} <: State2Workspace
+    C::Matrix{T}
+end
 type ExtractVector <: State2Workspace end
 state2workspace(v, SS::StateSpace) = state2workspace(v, SS.s2w)
 state2workspace(v, s2w::Identity) = v
 state2workspace(v, s2w::VectorView) = view(v, s2w.r)
 state2workspace(v, s2w::First2Vector2) = Vector2(v[1], v[2])    # without staged functions, this is faster than Select2Vector2
 state2workspace(v, s2w::Select2Vector2) = Vector2(v[s2w.a], v[s2w.b])
+state2workspace(v, s2w::OutputMatrix) = s2w.C*v
 state2workspace(v::SE2State, s2w::ExtractVector) = v.x
 
 workspace2state(w, SS::StateSpace) = workspace2state(w, SS, SS.s2w)
@@ -75,10 +79,12 @@ end
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::VectorView) = (v[s2w.r] = w; v)
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::First2Vector2) = (v[1] = w[1]; v[2] = w[2]; v)
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::Select2Vector2) = (v[s2w.a] = w[1]; v[s2w.b] = w[2]; v)
+workspace2state(w::AbstractVector, v::AbstractVector, s2w::OutputMatrix) = v + pinv(C)*(w - s2w.C*v)
 workspace2state(w::AbstractVector, v::SE2State, s2w::ExtractVector) = SE2State(Vector2(w), v.t)
 
 ### Waypoints
-setup_steering(SS::StateSpace, r) = nothing
+setup_steering(SS::StateSpace, r) = setup_steering(SS.dist, r)
+setup_steering(d::PreMetric, r) = nothing
 controltype(d::PreMetric) = NullControl
 
 waypoints{S<:State}(v::S, w::S, SS::StateSpace) = waypoints(v, w, SS.dist)
@@ -117,8 +123,9 @@ end
 
 ### Near Neighbor Setup (should be extended for best performance)
 defaultNN(SS::StateSpace, init) = defaultNN(SS.dist, init)
-defaultNN(d::Metric, init) = MetricNN_BruteForce(typeof(init)[init], d)
-defaultNN(d::QuasiMetric, init) = QuasiMetricNN_BruteForce(typeof(init)[init], d)
+defaultNN(d::Metric, init) = MetricNN_BruteForce(typeof(init)[init], d, init)
+defaultNN(d::QuasiMetric, init) = QuasiMetricNN_BruteForce(typeof(init)[init], d, init)
+# pairwise_distances(d::PreMetric, V) = # TODO: implement this in a reasonable manner with ControlInfo
 
 ### Plotting
 plot(SS::StateSpace) = plot_bounds(SS.lo, SS.hi)
@@ -136,5 +143,5 @@ function plot_tree(V::Path, A::Vector{Int}, SS::StateSpace; kwargs...)    # V is
 end
 
 include("statespaces/geometric.jl")
-# include("statespaces/linearquadratic.jl")
+include("statespaces/linearquadratic.jl")
 include("statespaces/simplecars.jl")

@@ -6,6 +6,7 @@ abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and tri
 type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
     dist::QuasiMetric
+    init::S
     DS::SparseMatrixCSC{T,Int}
     US::SparseMatrixCSC{U,Int}
     cacheF::Vector{Neighborhood{T}}
@@ -13,20 +14,22 @@ type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: Quasi
     kNNrF::Vector{T}
     kNNrB::Vector{T}
 
-    function QuasiMetricNN_BruteForce(V::Vector{S}, dist::QuasiMetric)
-        NN = new(V, dist)
+    function QuasiMetricNN_BruteForce(V::Vector{S}, dist::QuasiMetric, init::S)
+        NN = new(V, dist, init)
         initcache(NN)
     end
 end
 function initcache{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U})
     N = length(NN.V)
-    NN.DS, NN.US = pairwise_distances(NN.dist, NN.V)
+    if N > 0
+        NN.DS, NN.US = pairwise_distances(NN.dist, NN.V)
+    end
     NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
     NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
-QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric) =
-    QuasiMetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist) # so constructor works without {}
+QuasiMetricNN_BruteForce{S<:State}(V::Vector{S}, dist::QuasiMetric, init::S) =
+    QuasiMetricNN_BruteForce{S,eltype(S),controltype(dist)}(V,dist,init) # so constructor works without {}
 function loadNN!{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, NNDC::NNDatastructureCache, init::State, goal::Goal, CC::CollisionChecker)
     filter = Bool[is_free_state(v, CC) for v in NNDC.V]
     N = sum(filter)
