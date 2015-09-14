@@ -44,7 +44,7 @@ end
 sample_space(SS::RealVectorStateSpace) = (SS.lo + rand(SS.dim).*(SS.hi-SS.lo))   # TODO: @devec
 sample_space{T,M,W}(SS::SE2StateSpace{T,M,W}) = SE2State(SS.lo + Vector2{T}(rand(T), rand(T)).*(SS.hi-SS.lo), convert(T, 2pi*rand(T)))   # TODO: @devec
 function volume(SS::StateSpace)
-    !(isa(SS, RealVectorStateSpace) && isa(SS.dist, Euclidean)) && warn("Volume not yet implemented for non-Euclidean metrics!")
+    # !(isa(SS, RealVectorStateSpace) && isa(SS.dist, Euclidean)) && warn("Volume not yet implemented for non-Euclidean metrics!")
     prod(SS.hi-SS.lo)
 end
 

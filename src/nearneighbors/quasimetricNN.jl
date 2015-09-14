@@ -69,13 +69,19 @@ end
 function generate_QM_cache(SS, N, init, goal, r, fname = Pkg.dir("MotionPlanning")*"/data/DI_$(N)_$(r)")  # TODO: init, goal only here as a stopgap until quasimetricNN.jl:37 addressed
     V = [sample_space(SS) for i in 1:N]
     V[1] = init
-    V[end] = vector_to_state(sample_goal(goal), SS)
+    V[end] = sample_goal(goal, SS)
     setup_steering(SS, r)
     NNDC = NNDatastructureCache(QuasiMetricNN_BruteForce(V, SS.dist))
     saveNN(NNDC, fname)
 end
 
 ## Forwards
+
+function inballF{S,T,U}(NN::QuasiMetricNN_BruteForce{S,T,U}, v::S, r)
+    ds, us = MotionPlanning.pairwise_distances(NN.dist, typeof(v)[v], NN.V)
+    inds = find(0 .< ds[1,:] .<= .8)
+    Neighborhood(inds, vec(full(ds[1,inds])))
+end
 
 function inballF(NN::QuasiMetricNN_BruteForce, v::Int, r)
     @devec nn_bool = (0 .< NN.DS[v,:] .<= r)
