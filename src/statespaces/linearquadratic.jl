@@ -42,11 +42,13 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V
     IS, JS = findn(cd .> 0)
     VTS = [steer(dist.BVP, V[i], W[j], t) for (i,j) in zip(IS, JS)]
     II = find(T[v for (v,t) in VTS] .<= t)
-    DS = sparse(IS[II], JS[II], T[v for (v,t) in VTS[II]], N, N)
-    for i in 1:N
-        DS[i,i] = 0.
+    DS = sparse(IS[II], JS[II], T[v for (v,t) in VTS[II]], M, N)
+    if V == W
+        for i in 1:N
+            DS[i,i] = 0.
+        end
     end
-    US = sparse(IS[II], JS[II], FinalTime{T}[FinalTime(t) for (v,t) in VTS[II]], N, N)
+    US = sparse(IS[II], JS[II], FinalTime{T}[FinalTime(t) for (v,t) in VTS[II]], M, N)
     DS, US
 end
 pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S}, batchsize = 1001) = pairwise_distances(dist, V, V, batchsize)
