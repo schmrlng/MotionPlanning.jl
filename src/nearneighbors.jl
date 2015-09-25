@@ -9,13 +9,13 @@ abstract NearNeighborCache
 abstract MetricNN <: NearNeighborCache
 abstract QuasiMetricNN <: NearNeighborCache
 
-type Neighborhood{T<:FloatingPoint}
+type Neighborhood{T<:AbstractFloat}
     inds::Vector{Int}
     ds::Vector{T}
 end
 filter_neighborhood(n::Neighborhood, f::BitVector) = Neighborhood(n.inds[f[n.inds]], n.ds[f[n.inds]])  # TODO: this is slow (for loop to get rid of double-scan, or perhaps best, use an iterator)
 
-addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V, W], NN.dist, NN.init)
+addpoints(NN::NearNeighborCache, W) = typeof(NN)([NN.V; W], NN.dist, NN.init)
 length(NN::NearNeighborCache) = length(NN.V)
 getindex(NN::NearNeighborCache, i::Int) = i > 0 ? NN.V[i] : NN.init
 getindex(NN::NearNeighborCache, I::AbstractVector) = [NN[i] for i in I]
@@ -26,12 +26,12 @@ type NNDatastructureCache
     US
 end
 NNDatastructureCache(NN::NearNeighborCache) = NNDatastructureCache(NN.V, NN.DS, NN.US)
-function NNDatastructureCache(fname::String)
+function NNDatastructureCache(fname::AbstractString)
     open(fname, "r") do f
         deserialize(f)
     end
 end
-function saveNN(DC::NNDatastructureCache, fname::String)
+function saveNN(DC::NNDatastructureCache, fname::AbstractString)
     open(fname, "w") do f
         serialize(f, DC)
     end

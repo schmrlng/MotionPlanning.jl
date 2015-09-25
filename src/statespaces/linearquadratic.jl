@@ -3,8 +3,8 @@ export LinearQuadraticQuasiMetricSpace, DoubleIntegrator
 
 ### Linear Quadratic Typedefs
 ## Quasimetrics
-abstract LinearQuadratic{T<:FloatingPoint} <: QuasiMetric
-type FinalTime{T<:FloatingPoint} <: ControlInfo
+abstract LinearQuadratic{T<:AbstractFloat} <: QuasiMetric
+type FinalTime{T<:AbstractFloat} <: ControlInfo
     t::T
 end
 controltype(d::LinearQuadratic) = FinalTime
@@ -21,7 +21,7 @@ setup_steering(dist::LQOptSteering, r) = (dist.cmax = r)
 
 evaluate(M::LQOptSteering, v::AbstractVector, w::AbstractVector) = steer(M.BVP, v, w, M.cmax)[1]
 defaultNN(M::LQOptSteering, init::AbstractVector) = QuasiMetricNN_BruteForce(typeof(init)[], M, init)
-function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S}, W::Vector{S}, batchsize = 1001)
+function pairwise_distances{S<:State,T<:AbstractFloat}(dist::LQOptSteering{T}, V::Vector{S}, W::Vector{S}, batchsize = 1001)
     M = length(V)
     N = length(W)
     Vmat = hcat(V...)
@@ -51,7 +51,7 @@ function pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V
     US = sparse(IS[II], JS[II], FinalTime{T}[FinalTime(t) for (v,t) in VTS[II]], M, N)
     DS, US
 end
-pairwise_distances{S<:State,T<:FloatingPoint}(dist::LQOptSteering{T}, V::Vector{S}, batchsize = 1001) = pairwise_distances(dist, V, V, batchsize)
+pairwise_distances{S<:State,T<:AbstractFloat}(dist::LQOptSteering{T}, V::Vector{S}, batchsize = 1001) = pairwise_distances(dist, V, V, batchsize)
 
 ## Quasimetric Space Instantiation
 LinearQuadraticQuasiMetricSpace(d::Int, lo::Vector, hi::Vector, A::Matrix, B::Matrix, c::Vector, R::Matrix, C::Matrix) =

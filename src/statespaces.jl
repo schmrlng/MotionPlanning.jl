@@ -24,7 +24,7 @@ In rare circumstances, the user might need to specify:
 ==================================================================#
 
 ### State Space Definitions
-immutable RealVectorStateSpace{T<:FloatingPoint, M<:PreMetric, W<:State2Workspace} <: StateSpace
+immutable RealVectorStateSpace{T<:AbstractFloat, M<:PreMetric, W<:State2Workspace} <: StateSpace
     dim::Int
     lo::Vector{T}           # workspace only; 0 <= theta <= 2pi
     hi::Vector{T}
@@ -32,7 +32,7 @@ immutable RealVectorStateSpace{T<:FloatingPoint, M<:PreMetric, W<:State2Workspac
     s2w::W
 end
 
-immutable SE2StateSpace{T<:FloatingPoint, M<:PreMetric, W<:State2Workspace} <: StateSpace
+immutable SE2StateSpace{T<:AbstractFloat, M<:PreMetric, W<:State2Workspace} <: StateSpace
     dim::Int
     lo::Vector2{T}           # workspace only; 0 <= theta <= 2pi
     hi::Vector2{T}
@@ -58,7 +58,7 @@ type Select2Vector2 <: State2Workspace
     a::Int
     b::Int
 end
-type OutputMatrix{T<:FloatingPoint} <: State2Workspace
+type OutputMatrix{T<:AbstractFloat} <: State2Workspace
     C::Matrix{T}
 end
 type ExtractVector <: State2Workspace end
@@ -137,9 +137,9 @@ function plot_tree(V::Path, A::Vector{Int}, SS::StateSpace; kwargs...)    # V is
     VW = [state2workspace(v, SS) for v in V]
     pts = hcat(VW[find(A)]...)
     scatter(pts[1,:], pts[2,:], zorder=1; kwargs...)
-    X = vcat([[hcat(workspace_waypoints(V[A[w]], V[w], SS)...)[1,:]', nothing] for w in find(A)]...)
-    Y = vcat([[hcat(workspace_waypoints(V[A[w]], V[w], SS)...)[2,:]', nothing] for w in find(A)]...)
-    plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
+    X = vcat([[hcat(workspace_waypoints(V[A[w]], V[w], SS)...)[1,:]'; nothing] for w in find(A)]...)
+    Y = vcat([[hcat(workspace_waypoints(V[A[w]], V[w], SS)...)[2,:]'; nothing] for w in find(A)]...)
+    plt[:plot](X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
 
 include("statespaces/geometric.jl")

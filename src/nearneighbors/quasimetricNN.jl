@@ -3,7 +3,7 @@ export QuasiMetric, QuasiMetricNN_BruteForce, generate_QM_cache
 abstract QuasiMetric <: PreMetric   # positivity, positive definiteness, and triangle inequality (no symmetry)
 
 ### Quasimetric brute force
-type QuasiMetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
+type QuasiMetricNN_BruteForce{S<:State,T<:AbstractFloat,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
     dist::QuasiMetric
     init::S
@@ -120,7 +120,7 @@ function knnB(NN::QuasiMetricNN_BruteForce, v::Int, k = 1)    # ds sorted increa
 end
 
 ### Quasimetric LB by Euclidean (TODO: general bounded NN, and really a redesign of everything NN)
-type QMArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: QuasiMetricNN
+type QMArcLength_Pruned{S<:State,T<:AbstractFloat,U<:ControlInfo} <: QuasiMetricNN
     V::Vector{S}
     dist::QuasiMetric
     init::S
@@ -139,7 +139,7 @@ end
 function initcache{S,T,U}(NN::QMArcLength_Pruned{S,T,U})
     N = length(NN.V)
     N > 0 && (NN.DS = KDTree(hcat(NN.V...)))  # TODO: leafsize, reorder?
-    NN.US = sparse([],[],U[],N,N)
+    NN.US = sparse(Int[],Int[],U[],N,N)
     NN.cacheF, NN.kNNrF = Array(Neighborhood{T}, N), zeros(T, N)
     NN.cacheB, NN.kNNrB = Array(Neighborhood{T}, N), zeros(T, N)
     NN

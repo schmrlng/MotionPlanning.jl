@@ -14,7 +14,7 @@ type MPProblem
     goal::Goal
     CC::CollisionChecker
     V::NearNeighborCache
-    config_name::String
+    config_name::ASCIIString
     status::Symbol
     solution::MPSolution
 
@@ -23,7 +23,7 @@ type MPProblem
                        goal::Goal,
                        CC::CollisionChecker,
                        V::NearNeighborCache,
-                       config_name::String="$(SS.dim)D $(typeof(SS))")
+                       config_name::ASCIIString="$(SS.dim)D $(typeof(SS))")
         new(SS, init, goal, CC, V, config_name, "not yet solved")
     end
 end

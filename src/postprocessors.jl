@@ -10,7 +10,7 @@ function shortcut(path::Path, CC::CollisionChecker)
     if is_free_motion(path[1], path[end], CC)
         return path[[1,end]]
     end
-    mid = iceil(N/2)
+    mid = ceil(Int, N/2)
     return [shortcut(path[1:mid], CC)[1:end-1], shortcut(path[mid:end], CC)]
 end
 

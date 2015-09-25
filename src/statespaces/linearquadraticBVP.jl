@@ -6,21 +6,21 @@ using FastAnonymous
 function expAt(A::Matrix, t::SymPy.Sym)
     n = size(A,1)
     maximum(abs(A^n)) > 0 && error("TODO: implement more cases than nilpotent A! (e.g. diagonalizable)")
-    sum([A^i*t^i/factorial(i) for i in 0:n-1])
+    sum([A^i*(t^i/factorial(i)) for i in 0:n-1])
 end
 
 # Need this utility function since convert produces f : Sym -> Sym
-function Sym2Function(s::SymPy.Sym, args::Union(Symbol, Expr) = :t, replace_rule = ())
+function Sym2Function(s::SymPy.Sym, args::Union{Symbol, Expr} = :t, replace_rule = ())
     sliteral = string(SymPy.simplify(SymPy.expand(s)))    # sure, why not?
     length(replace_rule) > 0 && (sliteral = replace(sliteral, replace_rule...))
     @eval @anon $args -> $(parse(sliteral))
 end
-function Sym2Function(s::Vector{SymPy.Sym}, args::Union(Symbol, Expr) = :t, replace_rule = ())
+function Sym2Function(s::Vector{SymPy.Sym}, args::Union{Symbol, Expr} = :t, replace_rule = ())
     vliteral = "[" * join(map(x -> string(SymPy.simplify(SymPy.expand(x))), s), "; ") * "]"
     length(replace_rule) > 0 && (vliteral = replace(vliteral, replace_rule...))
     @eval @anon $args -> $(parse(vliteral))
 end
-function Sym2Function(s::Matrix{SymPy.Sym}, args::Union(Symbol, Expr) = :t, replace_rule = ())
+function Sym2Function(s::Matrix{SymPy.Sym}, args::Union{Symbol, Expr} = :t, replace_rule = ())
     mliteral = "[" * join(mapslices(rw -> join(rw, " "), map(x -> string(SymPy.simplify(SymPy.expand(x))), s), 2), "; ") * "]"
     length(replace_rule) > 0 && (mliteral = replace(mliteral, replace_rule...))
     @eval @anon $args -> $(parse(mliteral))
@@ -28,18 +28,18 @@ end
 
 ### Time-optimal 2BVP solution
 
-immutable LinearQuadratic2BVP{T<:FloatingPoint}
+immutable LinearQuadratic2BVP{T<:AbstractFloat}
     A::Matrix{T}
     B::Matrix{T}
     c::Vector{T}
     R::Matrix{T}
-    Ginv::DataType      # weird side effect of FastAnonymous
-    expAt::DataType
-    cdrift::DataType
-    cost::DataType
-    dcost::DataType
-    ddcost::DataType
-    x::DataType
+    Ginv::FastAnonymous.Fun
+    expAt::FastAnonymous.Fun
+    cdrift::FastAnonymous.Fun
+    cost::FastAnonymous.Fun
+    dcost::FastAnonymous.Fun
+    ddcost::FastAnonymous.Fun
+    x::FastAnonymous.Fun
 end
 function LinearQuadratic2BVP(A::Matrix, B::Matrix, c::Vector, R::Matrix)
     n = size(A, 1)
@@ -71,7 +71,7 @@ function LinearQuadratic2BVP(A::Matrix, B::Matrix, c::Vector, R::Matrix)
                         Sym2Function(xS, :(x, y, t, s), replace_rule))
 end
 
-function topt_bisection{dc}(::Type{dc}, x0, x1, tm; tol = 1e-6)
+function topt_bisection(dc, x0, x1, tm; tol = 1e-6)
     # Bisection
     b = tm
     dc(x0, x1, b) < 0 && return tm
@@ -87,7 +87,7 @@ function topt_bisection{dc}(::Type{dc}, x0, x1, tm; tol = 1e-6)
     m
 end
 
-function topt_newton{dc, ddc}(::Type{dc}, ::Type{ddc}, x0, x1, tm; tol = 1e-6)
+function topt_newton(dc, ddc, x0, x1, tm; tol = 1e-6)
     # Bisection / Newton's method combo
     b = tm
     dc(x0, x1, b) < 0 && return tm

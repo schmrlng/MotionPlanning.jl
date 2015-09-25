@@ -3,7 +3,7 @@ export fmtstar!
 fmtstar!(P::MPProblem; kwargs...) = fmtstar!(P, length(P.V); kwargs...)
 function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
                                         connections::Symbol = :R,
-                                        k = min(iceil((2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1),
+                                        k = min(ceil(Int, (2*rm)^P.SS.dim*(e/P.SS.dim)*log(N)), N-1),
                                         r = 0.,
                                         ensure_goal_ct = 1,
                                         init_idx = 1,
@@ -24,7 +24,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     if !is_free_state(P.init, P.CC, P.SS)
         warn("Initial state is infeasible!")
         P.status = :failed
-        P.solution = MPSolution(P.status, Inf, toq(), {})
+        P.solution = MPSolution(P.status, Inf, toq(), Dict())
         return Inf
     end
     free_volume_ub = sample_free!(P, N - length(P.V), ensure_goal_ct = ensure_goal_ct)  # TODO: clean this logic up
@@ -48,9 +48,9 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     if P.V[init_idx] == P.init
         W[init_idx] = false
         H[init_idx] = true
-        HHeap = CollectionsJ4.PriorityQueue([init_idx], [0.])
+        HHeap = Collections.PriorityQueue([init_idx], [0.])
     else    # special casing the first expansion round of FMT if P.init is not in the sample set
-        HHeap = CollectionsJ4.PriorityQueue(Int[], Float64[])
+        HHeap = Collections.PriorityQueue(Int[], Float64[])
         neighborhood = (connections == :R ? inballF(P.V, P.init, r) : knnF(P.V, P.init, r))
         for ii in 1:length(neighborhood.inds)
             x, c = neighborhood.inds[ii], neighborhood.ds[ii]
@@ -63,7 +63,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
             end
         end
     end
-    z = CollectionsJ4.dequeue!(HHeap)    # i.e. z = init_idx
+    z = Collections.dequeue!(HHeap)    # i.e. z = init_idx
 
     while !is_goal_pt(P.V[z], P.goal, P.SS)
         H_new = Int[]
@@ -83,7 +83,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         H[H_new] = true
         H[z] = false
         if !isempty(HHeap)
-            z = CollectionsJ4.dequeue!(HHeap)
+            z = Collections.dequeue!(HHeap)
         else
             break
         end
@@ -101,7 +101,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
     end
 
     P.status = is_goal_pt(P.V[z], P.goal, P.SS) ? :solved : :failed
-    solution_metadata = {
+    solution_metadata = Dict(
         "radius_multiplier" => rm,
         "collision_checks" => P.CC.count,
         "num_samples" => N,
@@ -111,7 +111,7 @@ function fmtstar!(P::MPProblem, N::Int; rm::Float64 = 1.0,
         "solved" => is_goal_pt(P.V[z], P.goal, P.SS),
         "tree" => A,
         "path" => sol
-    }
+    )
     connections == :R && (solution_metadata["r"] = r)
     connections == :K && (solution_metadata["k"] = k)
     P.solution = MPSolution(P.status, C[z], toq(), solution_metadata)

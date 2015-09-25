@@ -1,7 +1,7 @@
 export EuclideanNN_KDTree, MetricNN_BruteForce, ArcLength_Pruned
 
 ### Metric brute force
-type MetricNN_BruteForce{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
+type MetricNN_BruteForce{S<:State,T<:AbstractFloat,U<:ControlInfo} <: MetricNN
     V::Vector{S}
     dist::Metric
     DS::Matrix{T}
@@ -40,12 +40,12 @@ function knn(NN::MetricNN_BruteForce, v::Int, k = 1)    # ds sorted increasing
 end
 
 ### Euclidean k-d tree
-type EuclideanNN_KDTree{S<:AbstractVector,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
+type EuclideanNN_KDTree{S<:AbstractVector,T<:AbstractFloat,U<:ControlInfo} <: MetricNN
     V::Vector{S}
     dist::Metric
     init::S
     DS::KDTree
-    US::Nothing
+    US::Void
     cache::Vector{Neighborhood{T}}
     kNNr::Vector{T}
 
@@ -84,7 +84,7 @@ function knn{S,T,U}(NN::EuclideanNN_KDTree{S,T,U}, v::Int, k = 1)    # ds sorted
 end
 
 ### Arc length pruned KDTree
-type ArcLength_Pruned{S<:State,T<:FloatingPoint,U<:ControlInfo} <: MetricNN
+type ArcLength_Pruned{S<:State,T<:AbstractFloat,U<:ControlInfo} <: MetricNN
     V::Vector{S}
     dist::Metric
     DS::KDTree
@@ -100,7 +100,7 @@ end
 function initcache{S,T,U}(NN::ArcLength_Pruned{S,T,U})
     N = length(NN.V)
     N > 0 && (NN.DS = KDTree(hcat(NN.V...)))  # TODO: leafsize, reorder?
-    NN.US = sparse([],[],U[],N,N)
+    NN.US = sparse(Int[],Int[],U[],N,N)
     NN.cache, NN.kNNr = Array(Neighborhood{T}, N), zeros(T, N)
     NN
 end
@@ -120,7 +120,7 @@ function knn{S,T,U}(NN::ArcLength_Pruned{S,T,U}, v::Int, k = 1)    # ds sorted i
     error("NN datastructure ArcLength_Pruned does not support k-nearest neighbors. Try brute force?")
 end
 
-# type EuclideanNN_FLANN{S<:AbstractVector,T<:FloatingPoint} <: MetricNN
+# type EuclideanNN_FLANN{S<:AbstractVector,T<:AbstractFloat} <: MetricNN
 #     V::Vector{S}
 #     DS::FLANNIndex
 #     cache::Vector{Neighborhood{T}}

@@ -2,12 +2,12 @@ export ReedsSheppMetricSpace, DubinsQuasiMetricSpace
 
 ### Simple Car Typedefs
 ## Basics
-immutable CarSegment{T<:FloatingPoint}
+immutable CarSegment{T<:AbstractFloat}
     t::Int          # segment type (L = 1, S = 0, R = -1)               # TODO: t for type here and t for theta in SE2State is terribly confusing
     d::T            # segment length (radians for curved segments)
 end
 typealias CarPath{T} Vector{CarSegment{T}}
-immutable CirclePoints{T<:FloatingPoint}  # TODO: cache CW and CCW for faster waypoint interpolation
+immutable CirclePoints{T<:AbstractFloat}  # TODO: cache CW and CCW for faster waypoint interpolation
     r::T
     dt::T
     pts::Vector{Vector2{T}}
@@ -15,23 +15,23 @@ end
 CirclePoints{T}(r::T, N::Int) = CirclePoints(r, 2pi/N, [r*Vector2(cos(x), sin(x)) for x in linspace(0,2pi,N+1)[1:end-1]])
 
 ## Metrics
-immutable ReedsSheppExact{T<:FloatingPoint} <: Metric
+immutable ReedsSheppExact{T<:AbstractFloat} <: Metric
     r::T
     CP::CirclePoints{T}
     p::CarPath{T}    # scratch space to avoid extra memory allocation
 
     ReedsSheppExact(r::T, CP::CirclePoints{T}) = new(r, CP, Array(CarSegment{T}, 5))
 end
-ReedsSheppExact{T<:FloatingPoint}(r::T, CP::CirclePoints{T}) = ReedsSheppExact{T}(r, CP)
-immutable DubinsExact{T<:FloatingPoint} <: QuasiMetric
+ReedsSheppExact{T<:AbstractFloat}(r::T, CP::CirclePoints{T}) = ReedsSheppExact{T}(r, CP)
+immutable DubinsExact{T<:AbstractFloat} <: QuasiMetric
     r::T
     CP::CirclePoints{T}
     p::CarPath{T}    # scratch space to avoid extra memory allocation
 
     DubinsExact(r::T, CP::CirclePoints{T}) = new(r, CP, Array(CarSegment{T}, 3))
 end
-DubinsExact{T<:FloatingPoint}(r::T, CP::CirclePoints{T}) = DubinsExact{T}(r, CP)
-typealias SimpleCarMetric{T} Union(ReedsSheppExact{T}, DubinsExact{T})
+DubinsExact{T<:AbstractFloat}(r::T, CP::CirclePoints{T}) = DubinsExact{T}(r, CP)
+typealias SimpleCarMetric{T} Union{ReedsSheppExact{T}, DubinsExact{T}}
 
 evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
 evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
@@ -49,14 +49,14 @@ DubinsQuasiMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =
 function waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
     s.t == 0 && return [v, SE2State{T}(v.x+s.d*Vector2(cos(v.t), sin(v.t)), v.t)]
     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-    turnpts = push!(cp.pts[1:1+ifloor(abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
+    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
     if s.t*s.d < 0
         for i in 1:length(turnpts)      # manual @devec
             turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
         end
     end
     pts = Vector2{T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
-    thetas = push!([v.t + i*sign(s.d)*s.t*cp.dt for i in 0:ifloor(abs(s.d)/cp.dt)], v.t + s.t*s.d)  # TODO: this whole method is hacky/suboptimal for now, see CirclePoints note
+    thetas = push!([v.t + i*sign(s.d)*s.t*cp.dt for i in 0:floor(Int, abs(s.d)/cp.dt)], v.t + s.t*s.d)  # TODO: this whole method is hacky/suboptimal for now, see CirclePoints note
     [SE2State{T}(p,t) for (p,t) in zip(pts, thetas)]
 end
 function waypoints{T}(v::SE2State{T}, p::CarPath{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
@@ -87,7 +87,7 @@ waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, cp::CirclePoints
 function workspace_waypoints{T}(v::SE2State{T}, s::CarSegment{T}, s2w::ExtractVector, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
     s.t == 0 && return Vector2{T}[v.x, v.x+s.d*Vector2(cos(v.t), sin(v.t))]  # TODO: remove when [a, b] no longer concatenates
     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-    turnpts = push!(cp.pts[1:1+ifloor(abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
+    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
     if s.t*s.d < 0
         for i in 1:length(turnpts)      # manual @devec
             turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
@@ -261,7 +261,7 @@ function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r = one(T), pmin = Array(Ca
     a = mod2pi(s1.t - th)
     b = mod2pi(s2.t - th)
 
-    cmin = inf(T)
+    cmin = T(Inf)
     for dubinsType! in dubinsTypes
         cmin = dubinsType!(d, a, b, cmin, pmin)
     end
@@ -340,7 +340,7 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r = one(T), p = Array(C
     brTarget = reflect(bTarget)
     btrTarget = reflect(btTarget)
     
-    c, l = inf(T), 0
+    c, l = T(Inf), 0
     # Only Tim Wheeler knows what the hell is happening down below
     # (8.1) C S C
     b, c, l = LpSpLp!(target, c, l, p); b && (post = POST)

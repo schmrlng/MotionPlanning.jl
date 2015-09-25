@@ -2,7 +2,7 @@ export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_e
 
 # ---------- Shape Definitions ----------
 
-abstract Shape2D{T<:FloatingPoint}
+abstract Shape2D{T<:AbstractFloat}
 
 type Circle{T} <: Shape2D{T}
     c::Vector2{T}
@@ -34,7 +34,7 @@ type Polygon{T} <: Shape2D{T}
         sum([(points[wrap1(i+1,N)][1] - points[i][1])*(points[wrap1(i+1,N)][2] + points[i][2]) for i in 1:N]) > 0 && reverse!(points)
         edges = Vector2{T}[points[wrap1(i+1,N)] - points[i] for i in 1:N]
         normals = Vector2{T}[unit(perp(g)) for g in edges]
-        any(-pi .<= diff([T[atan2(n) for n in normals], atan2(normals[1])]) .<= 0) && error("Polygon needs to be convex")
+        any(-pi .<= diff([T[atan2(n) for n in normals]; atan2(normals[1])]) .<= 0) && error("Polygon needs to be convex")
         xrange = Vector2{T}(extrema([points[i][1] for i in 1:N])...)
         yrange = Vector2{T}(extrema([points[i][2] for i in 1:N])...)
         nextrema = Vector2{T}[projectNextrema(points, normals[i]) for i in 1:N]
@@ -43,7 +43,7 @@ type Polygon{T} <: Shape2D{T}
 end
 Polygon{T}(points::Vector{Vector{T}}) = Polygon{T}([Vector2(p) for p in points])
 Polygon{T}(points::Vector{Vector2{T}}) = Polygon{T}(points)   # so Polygon(pts) works without {T}
-Polygon{T}(points::Vector{(T,T)}) = Polygon{T}([Vector2(p...) for p in points])
+Polygon{T}(points::Vector{Tuple{T,T}}) = Polygon{T}([Vector2(p...) for p in points])
 Box2D{T}(xr::AbstractVector{T}, yr::AbstractVector{T}) = Polygon{T}(Vector2{T}[Vector2(xr[1], yr[1]),
                                                                                Vector2(xr[2], yr[1]),
                                                                                Vector2(xr[2], yr[2]),
@@ -83,8 +83,8 @@ function Compound2D{T}(parts::Vector{Shape2D{T}})    # TODO: allow Vectors of Sh
     Compound2D{T}(parts, xrange, yrange)
 end
 
-typealias PolyOrLine{T} Union(Polygon{T}, Line{T})
-typealias Basic2D{T} Union(Circle{T}, Polygon{T})    # TODO: Figure out why I have Shape2D, PolyOrLine, and Basic2D
+typealias PolyOrLine{T} Union{Polygon{T}, Line{T}}
+typealias Basic2D{T} Union{Circle{T}, Polygon{T}}    # TODO: Figure out why I have Shape2D, PolyOrLine, and Basic2D
 
 # type AABB{T} <: Shape2D{T}  # a bit late to the party; could refactor other Shapes
 #     xrange::Vector2{T}

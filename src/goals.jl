@@ -4,16 +4,16 @@ abstract Goal
 abstract WorkspaceGoal <: Goal
 abstract StateSpaceGoal <: Goal
 
-immutable RectangleGoal{T<:FloatingPoint} <: WorkspaceGoal
+immutable RectangleGoal{T<:AbstractFloat} <: WorkspaceGoal
     bounds::Matrix{T}
 end
 
-immutable BallGoal{T<:FloatingPoint} <: WorkspaceGoal
+immutable BallGoal{T<:AbstractFloat} <: WorkspaceGoal
     center::AbstractVector{T}
     radius::T
 end
 
-immutable PointGoal{T<:FloatingPoint} <: WorkspaceGoal
+immutable PointGoal{T<:AbstractFloat} <: WorkspaceGoal
     pt::AbstractVector{T}
 end
 
