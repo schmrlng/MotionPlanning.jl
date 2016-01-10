@@ -10,7 +10,8 @@ using Grid
 using Distances
 using KDTrees
 # using Graphs
-using ImmutableArrays
+# using ImmutableArrays
+using FixedSizeArrays
 # using Convex
 # using ECOS
 

@@ -4,17 +4,17 @@ import Base: getindex, eltype, convert, hcat
 export AbstractState, State, Path
 
 abstract AbstractState
-typealias State Union{AbstractVector, AbstractState}
+typealias State Union{AbstractVector, FixedVector, AbstractState}
 typealias Path{T<:State} Vector{T}
 
 ### State Typedefs
 export SE2State
 
 immutable SE2State{T<:AbstractFloat} <: AbstractState
-    x::Vector2{T}
+    x::Vec{2,T}
     t::T
 end
-SE2State{T<:AbstractFloat}(x::T, y::T, t::T) = SE2State(Vector2{T}(x,y), t)
+SE2State{T<:AbstractFloat}(x::T, y::T, t::T) = SE2State(Vec{2,T}(x,y), t)
 function getindex(s::SE2State, d::Symbol)  # incurs a slight performance hit over direct element access
     if d == :x
         return s.x[1]
@@ -27,8 +27,14 @@ function getindex(s::SE2State, d::Symbol)  # incurs a slight performance hit ove
 end
 eltype{T}(::SE2State{T}) = T
 eltype{T}(::Type{SE2State{T}}) = T
-convert{T}(::Type{Vector{T}}, s::SE2State{T}) = convert(Vector{T}, s.x)  # TODO: a dangerous default; should be eliminated
-hcat(X::SE2State...) = hcat([X[i].x for i in 1:length(X)]...)             # TODO: also sort of weird, but very useful
+convert{T,S}(::Type{Vector{T}}, s::SE2State{S}) = convert(Vector{T}, s.x)       # TODO: a dangerous default; should be eliminated
+function hcat{T}(X::SE2State{T}...)                                             # TODO: also sort of weird, but very useful
+    result = Array(T, 2, length(X))
+    @inbounds for i in 1:length(X), j in 1:2
+        result[j,i] = X[i].x[j]
+    end
+    result
+end
 
 ### Abstract State Space Typedefs
 export StateSpace, State2Workspace, QuasiMetric, ControlInfo, NullControl
