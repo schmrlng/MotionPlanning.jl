@@ -14,6 +14,9 @@ using ImmutableArrays
 # using Convex
 # using ECOS
 
+### Imports to be extended
+import PyPlot.plot
+
 ### Includes
 include("primitivetypes.jl")
 include("utilities/vec2Dutils.jl")

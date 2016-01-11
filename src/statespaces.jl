@@ -79,7 +79,7 @@ end
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::VectorView) = (v[s2w.r] = w; v)
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::First2Vector2) = (v[1] = w[1]; v[2] = w[2]; v)
 workspace2state(w::AbstractVector, v::AbstractVector, s2w::Select2Vector2) = (v[s2w.a] = w[1]; v[s2w.b] = w[2]; v)
-workspace2state(w::AbstractVector, v::AbstractVector, s2w::OutputMatrix) = v + pinv(C)*(w - s2w.C*v)
+workspace2state(w::AbstractVector, v::AbstractVector, s2w::OutputMatrix) = v + pinv(s2w.C)*(w - s2w.C*v)
 workspace2state(w::AbstractVector, v::SE2State, s2w::ExtractVector) = SE2State(Vector2(w), v.t)
 
 ### Waypoints
