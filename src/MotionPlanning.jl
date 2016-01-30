@@ -8,7 +8,9 @@ using GZip
 using Grid
 # using HypothesisTests
 using Distances
-using KDTrees
+using NearestNeighbors
+using SparseVectors
+# using KDTrees
 # using Graphs
 # using ImmutableArrays
 using FixedSizeArrays
@@ -20,7 +22,7 @@ import PyPlot.plot
 
 ### Includes
 include("primitivetypes.jl")
-include("utilities/vec2Dutils.jl")
+include("utilities/utils.jl")
 include("collisioncheckers.jl")
 include("goals.jl")
 include("nearneighbors.jl")

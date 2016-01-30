@@ -1,9 +1,8 @@
-import Base: atan2, full, cross
+import Base: atan2, cross
 import FixedSizeArrays: unit
 export norm2, perp, project, projectN, reflect, reflectN, rotate
-export projectNextrema, voronoi_region, overlapping, inrange, minmaxV, wrap1
+export projectNextrema, voronoi_region, overlapping, ininterval, minmaxV, wrap1
 
-full{T}(v::Vec{2,T}) = convert(Vector{T}, v)
 unit(v::Vec{2}) = v/norm(v)
 norm2(v::Vec{2}) = dot(v,v)
 perp(v::Vec{2}) = Vec(v[2],-v[1])
@@ -35,6 +34,6 @@ function voronoi_region(p::Vec{2}, v::Vec{2})
     return 0
 end
 overlapping(I1::Vec{2}, I2::Vec{2}) = I1[1] <= I2[2] && I2[1] <= I1[2]
-inrange(x, I::Vec{2}) = I[1] <= x <= I[2]
+ininterval(x, I::Vec{2}) = I[1] <= x <= I[2]
 minmaxV(x, y) = x < y ? Vec(x,y) : Vec(y,x)  # Base.minmax returns tuple 
 wrap1(i, N) = i < 1 ? N : i > N ? 1 : i      # marginally faster than mod1

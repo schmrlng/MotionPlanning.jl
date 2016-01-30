@@ -1,4 +1,5 @@
 export ReedsSheppMetricSpace, DubinsQuasiMetricSpace
+export ReedsSheppExact, DubinsExact, SimpleCarMetric
 
 ### Simple Car Typedefs
 ## Basics
@@ -10,9 +11,9 @@ typealias CarPath{T} Vector{CarSegment{T}}
 immutable CirclePoints{T<:AbstractFloat}  # TODO: cache CW and CCW for faster waypoint interpolation
     r::T
     dt::T
-    pts::Vector{Vector2{T}}
+    pts::Vector{Vec{2,T}}
 end
-CirclePoints{T}(r::T, N::Int) = CirclePoints(r, 2pi/N, [r*Vector2(cos(x), sin(x)) for x in linspace(0,2pi,N+1)[1:end-1]])
+CirclePoints{T}(r::T, N::Int) = CirclePoints(r, 2pi/N, [r*Vec(cos(x), sin(x)) for x in linspace(0,2pi,N+1)[1:end-1]])
 
 ## Metrics
 immutable ReedsSheppExact{T<:AbstractFloat} <: Metric
@@ -35,27 +36,36 @@ typealias SimpleCarMetric{T} Union{ReedsSheppExact{T}, DubinsExact{T}}
 
 evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
 evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
-defaultNN(RS::ReedsSheppExact, init::SE2State) = ArcLength_Pruned(typeof(init)[], RS, init)  # TODO: abstract ALB_Metric
-defaultNN(D::DubinsExact, init::SE2State) = QMArcLength_Pruned(typeof(init)[], D, init)
+# colwise{S<:SE2State}(SCM::SimpleCarMetric, v::S, W::Vector{S}) = [evaluate(SCM, v, w) for w in W]
+function helper_data_structures{S<:SE2State,R<:ReedsSheppExact}(V::Vector{S}, M::ChoppedLowerBoundedMetric{R})
+    TreeDistanceDS(KDTree(hcat(V...), M.lowerbound; reorder=false)), EmptyControlDS()  # TODO: ControlDS doesn't have to be empty
+end
+function helper_data_structures{S<:SE2State,R<:DubinsExact}(V::Vector{S}, M::ChoppedLowerBoundedQuasiMetric{R})
+    DS = TreeDistanceDS(KDTree(hcat(V...), M.lowerbound; reorder=false))
+    US = EmptyControlDS()
+    DS, US, DS, US
+end
+# defaultNN(RS::ReedsSheppExact, init::SE2State) = ArcLength_Pruned(typeof(init)[], RS, init)  # TODO: abstract ALB_Metric
+# defaultNN(D::DubinsExact, init::SE2State) = QMArcLength_Pruned(typeof(init)[], D, init)
 
-## Metric(-ish) Space Instantiation 
-ReedsSheppMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =
-    SE2StateSpace(3, lo, hi, ReedsSheppExact(r, CirclePoints(r, res)), ExtractVector())
-DubinsQuasiMetricSpace(r, lo = Vector2(0.,0.), hi = Vector2(1.,1.); res = 16) =
-    SE2StateSpace(3, lo, hi, DubinsExact(r, CirclePoints(r, res)), ExtractVector())
+## Metric(-ish) Space Instantiation
+ReedsSheppMetricSpace{T}(r::T, lo = zero(Vec{2,T}), hi = one(Vec{2,T}); res = 16) =
+    SE2StateSpace(lo, hi, ChoppedLowerBoundedMetric(ReedsSheppExact(r, CirclePoints(r, res)), Euclidean(), T(Inf)), ExtractVector())
+DubinsQuasiMetricSpace{T}(r::T, lo = zero(Vec{2,T}), hi = one(Vec{2,T}); res = 16) =
+    SE2StateSpace(lo, hi, ChoppedLowerBoundedQuasiMetric(DubinsExact(r, CirclePoints(r, res)), Euclidean(), T(Inf)), ExtractVector())
 
 ### Waypoint Interpolation
 ## Full Waypoints
 function waypoints{T}(v::SE2State{T}, s::CarSegment{T}, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
-    s.t == 0 && return [v, SE2State{T}(v.x+s.d*Vector2(cos(v.t), sin(v.t)), v.t)]
-    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
+    s.t == 0 && return [v, SE2State{T}(v.x+s.d*Vec(cos(v.t), sin(v.t)), v.t)]
+    center = v.x + sign(s.t)*Vec(-r*sin(v.t), r*cos(v.t))
+    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vec(r*cos(abs(s.d)), r*sin(abs(s.d))))
     if s.t*s.d < 0
         for i in 1:length(turnpts)      # manual @devec
-            turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
+            turnpts[i] = Vec(turnpts[i][1], -turnpts[i][2])
         end
     end
-    pts = Vector2{T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
+    pts = Vec{2,T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
     thetas = push!([v.t + i*sign(s.d)*s.t*cp.dt for i in 0:floor(Int, abs(s.d)/cp.dt)], v.t + s.t*s.d)  # TODO: this whole method is hacky/suboptimal for now, see CirclePoints note
     [SE2State{T}(p,t) for (p,t) in zip(pts, thetas)]
 end
@@ -77,26 +87,26 @@ function waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T = 1., 
     end
     pts
 end
-waypoints{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, cp::CirclePoints{T} = CirclePoints(RS.r, 50)) =
+waypoints{T}(RS::ReedsSheppExact{T}, v::SE2State{T}, w::SE2State{T}, cp::CirclePoints{T} = CirclePoints(RS.r, 50)) =
     waypoints(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, cp)
-waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, cp::CirclePoints{T} = CirclePoints(D.r, 50)) =
+waypoints{T}(D::DubinsExact{T}, v::SE2State{T}, w::SE2State{T}, cp::CirclePoints{T} = CirclePoints(D.r, 50)) =
     waypoints(v, w, dubins(v, w, D.r, D.p)[2], D.r, cp)
 
 ## Special Cases for collision_waypoints and workspace_waypoints
 # ExtractVector (Planar Position)
 function workspace_waypoints{T}(v::SE2State{T}, s::CarSegment{T}, s2w::ExtractVector, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
-    s.t == 0 && return Vector2{T}[v.x, v.x+s.d*Vector2(cos(v.t), sin(v.t))]  # TODO: remove when [a, b] no longer concatenates
-    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vector2(r*cos(abs(s.d)), r*sin(abs(s.d))))
+    s.t == 0 && return Vec{2,T}[v.x, v.x+s.d*Vec(cos(v.t), sin(v.t))]  # TODO: remove when [a, b] no longer concatenates
+    center = v.x + sign(s.t)*Vec(-r*sin(v.t), r*cos(v.t))
+    turnpts = push!(cp.pts[1:1+floor(Int, abs(s.d)/cp.dt)], Vec(r*cos(abs(s.d)), r*sin(abs(s.d))))
     if s.t*s.d < 0
         for i in 1:length(turnpts)      # manual @devec
-            turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
+            turnpts[i] = Vec(turnpts[i][1], -turnpts[i][2])
         end
     end
-    Vector2{T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
+    Vec{2,T}[(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
 end
 function workspace_waypoints{T}(v::SE2State{T}, p::CarPath{T}, s2w::ExtractVector, r::T = 1., cp::CirclePoints{T} = CirclePoints(r, 50))
-    pts = Array(Vector2{T}, 0)
+    pts = Array(Vec{2,T}, 0)
     for s in p
         s_pts = workspace_waypoints(v, s, s2w, r, cp)
         append!(pts, s_pts[1:end-1])
@@ -118,21 +128,21 @@ function workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, s
     end
     pts
 end
-workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, s2w::State2Workspace, cp::CirclePoints{T} = CirclePoints(RS.r, 50)) =
+workspace_waypoints{T}(RS::ReedsSheppExact{T}, v::SE2State{T}, w::SE2State{T}, s2w::State2Workspace, cp::CirclePoints{T} = CirclePoints(RS.r, 50)) =
     workspace_waypoints(v, w, reedsshepp(v, w, RS.r, RS.p)[2], s2w, RS.r, cp)
-workspace_waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, s2w::State2Workspace, cp::CirclePoints{T} = CirclePoints(D.r, 50)) =
+workspace_waypoints{T}(D::DubinsExact{T}, v::SE2State{T}, w::SE2State{T}, s2w::State2Workspace, cp::CirclePoints{T} = CirclePoints(D.r, 50)) =
     workspace_waypoints(v, w, dubins(v, w, D.r, D.p)[2], s2w, D.r, cp)
-collision_waypoints{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, s2w::State2Workspace, cp::CirclePoints{T} = RS.CP) =
+collision_waypoints{T}(RS::ReedsSheppExact{T}, v::SE2State{T}, w::SE2State{T}, s2w::State2Workspace, cp::CirclePoints{T} = RS.CP) =
     workspace_waypoints(v, w, reedsshepp(v, w, RS.r, RS.p)[2], s2w, RS.r, cp)
-collision_waypoints{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, s2w::State2Workspace, cp::CirclePoints{T} = D.CP) =
+collision_waypoints{T}(D::DubinsExact{T}, v::SE2State{T}, w::SE2State{T}, s2w::State2Workspace, cp::CirclePoints{T} = D.CP) =
     workspace_waypoints(v, w, dubins(v, w, D.r, D.p)[2], s2w, D.r, cp)
 
 ## Discretized by Time
 function time_waypoint{T}(v::SE2State{T}, s::CarSegment{T}, r::T, t::T)
-    s.t == 0 && return SE2State{T}(v.x + sign(s.d)*min(t, abs(s.d))*Vector2(cos(v.t), sin(v.t)), v.t)
-    center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
+    s.t == 0 && return SE2State{T}(v.x + sign(s.d)*min(t, abs(s.d))*Vec(cos(v.t), sin(v.t)), v.t)
+    center = v.x + sign(s.t)*Vec(-r*sin(v.t), r*cos(v.t))
     th = min(t/r, abs(s.d))
-    turnpt = s.t*s.d > 0 ? Vector2(r*cos(th), r*sin(th)) : Vector2(r*cos(th), -r*sin(th))
+    turnpt = s.t*s.d > 0 ? Vec(r*cos(th), r*sin(th)) : Vec(r*cos(th), -r*sin(th))
     SE2State{T}(center + sign(s.t)*rotate(turnpt, v.t-pi/2), v.t + sign(s.d)*s.t*th)
 end
 function time_waypoint{T}(v::SE2State{T}, p::CarPath{T}, r::T, t::T)
@@ -152,9 +162,9 @@ function time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, p::CarPath{T}, r::T, t
     fix_w && error("TODO: this code is all temporary anyway, so I won't implement this right now.")
     time_waypoint(v, p, r, t)
 end
-time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, RS::ReedsSheppExact{T}, t::T) = time_waypoint(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, t)
-time_waypoint{T}(v::SE2State{T}, w::SE2State{T}, D::DubinsExact{T}, t::T) = time_waypoint(v, w, dubins(v, w, D.r, D.p)[2], D.r, t)
-cost_waypoint{T}(v::SE2State{T}, w::SE2State{T}, M::SimpleCarMetric{T}, c::T) = time_waypoint(v, w, M, c)
+time_waypoint{T}(RS::ReedsSheppExact{T}, v::SE2State{T}, w::SE2State{T}, t::T) = time_waypoint(v, w, reedsshepp(v, w, RS.r, RS.p)[2], RS.r, t)
+time_waypoint{T}(D::DubinsExact{T}, v::SE2State{T}, w::SE2State{T}, t::T) = time_waypoint(v, w, dubins(v, w, D.r, D.p)[2], D.r, t)
+cost_waypoint{T}(M::SimpleCarMetric{T}, v::SE2State{T}, w::SE2State{T}, c::T) = time_waypoint(M, v, w, c)
 
 ### Dubins Steering Nuts and Bolts
 function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})

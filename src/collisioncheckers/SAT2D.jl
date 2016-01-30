@@ -1,5 +1,5 @@
 import Base.eltype
-export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_ends_free, closest, close
+export Shape2D, Circle, Polygon, Box2D, Line, Compound2D, colliding, colliding_ends_free, closest, closeR
 
 # ---------- Shape Definitions ----------
 
@@ -8,7 +8,7 @@ typealias AnyVec2{T} Union{AbstractVector{T}, Vec{2,T}, Tuple{T,T}}
 eltype{T<:AbstractFloat}(::Type{Shape2D{T}}) = T
 eltype{T<:Shape2D}(::Type{T}) = eltype(super(T))
 
-type Circle{T} <: Shape2D{T}
+immutable Circle{T} <: Shape2D{T}
     c::Vec{2,T}
     r::T
     xrange::Vec{2,T}
@@ -24,7 +24,7 @@ Circle(c::AnyVec2, r) = Circle{eltype(c)}(Vec(c[1], c[2]), r,
                                           Vec(c[2]-r, c[2]+r))
 projectNextrema(C::Circle, n::Vec{2}) = (d = dot(C.c,n); Vec(d-C.r, d+C.r))
 
-type Polygon{T} <: Shape2D{T}
+immutable Polygon{T} <: Shape2D{T}
     points::Vector{Vec{2,T}}
     edges::Vector{Vec{2,T}}
     normals::Vector{Vec{2,T}}
@@ -45,14 +45,14 @@ type Polygon{T} <: Shape2D{T}
         new(points, edges, normals, xrange, yrange, nextrema)
     end
 end
-Polygon{T<:AnyVec2}(points::Vector{T}) = Polygon{eltype(T)}(Vec{2,eltype(T)}[Vec(p) for p in points])
+Polygon{T<:AnyVec2}(points::Vector{T}) = Polygon{eltype(T)}(Vec{2,eltype(T)}[Vec(p[1],p[2]) for p in points])
 Box2D(xr::AnyVec2, yr::AnyVec2) = Polygon([Vec(xr[1], yr[1]),
                                            Vec(xr[2], yr[1]),
                                            Vec(xr[2], yr[2]),
                                            Vec(xr[1], yr[2])])
 projectNextrema(P::Polygon, n::Vec{2}) = projectNextrema(P.points, n)
 
-type Line{T} <: Shape2D{T}   # special case of Polygon; only 1 edge/normal
+immutable Line{T} <: Shape2D{T}   # special case of Polygon; only 1 edge/normal
     v::Vec{2,T}
     w::Vec{2,T}
     edge::Vec{2,T}
@@ -70,10 +70,10 @@ type Line{T} <: Shape2D{T}   # special case of Polygon; only 1 edge/normal
         new(v, w, edge, normal, xrange, yrange, ndotv)
     end
 end
-Line(v::AnyVec2, w::AnyVec2) = Line{eltype(v)}(Vec(v), Vec(w))
+Line(v::AnyVec2, w::AnyVec2) = Line{eltype(v)}(Vec(v[1],v[2]), Vec(w[1],w[2]))
 projectNextrema(L::Line, n::Vec{2}) = minmaxV(dot(L.v,n), dot(L.w,n))
 
-type Compound2D{T} <: Shape2D{T}
+immutable Compound2D{T} <: Shape2D{T}
     parts::Vector{Shape2D{T}}
     xrange::Vec{2,T}
     yrange::Vec{2,T}
@@ -100,34 +100,26 @@ typealias Basic2D{T} Union{Circle{T}, Polygon{T}}    # TODO: Figure out why I ha
 
 # ---------- Separating Axis ----------
 
-is_separating_axis(S1::Shape2D, S2::Shape2D, ax::Vec{2}) = !overlapping(projectNextrema(S1, ax),
-                                                                         projectNextrema(S2, ax))
-is_separating_axis(P::Polygon, S::Shape2D, i::Integer) = !overlapping(P.nextrema[i],
-                                                                      projectNextrema(S, P.normals[i]))
-is_separating_axis(L::Line, P::Polygon) = !inrange(L.ndotv, projectNextrema(P, L.normal))
+is_separating_axis(S1::Shape2D, S2::Shape2D, ax::Vec{2}) = !overlapping(projectNextrema(S1, ax), projectNextrema(S2, ax))
+is_separating_axis(P::Polygon, S::Shape2D, i::Integer) = !overlapping(P.nextrema[i], projectNextrema(S, P.normals[i]))
+is_separating_axis(L::Line, P::Polygon) = !ininterval(L.ndotv, projectNextrema(P, L.normal))
 
 # ---------- Collision Checking ----------
 
 ## Broadphase
 AABBseparated(S1::Shape2D, S2::Shape2D) = !(overlapping(S1.xrange, S2.xrange) && overlapping(S1.yrange, S2.yrange))
-pointinAABB(p::Vec{2}, S::Shape2D) = inrange(p[1], S.xrange) && inrange(p[2], S.yrange)
+pointinAABB(p::Vec{2}, S::Shape2D) = ininterval(p[1], S.xrange) && ininterval(p[2], S.yrange)
 ## Point collision
 colliding(p::Vec{2}, C::Circle) = norm2(p - C.c) <= C.r^2
 colliding(C::Circle, p::Vec{2}) = norm2(p - C.c) <= C.r^2
 function colliding(p::Vec{2}, P::Polygon)
     !pointinAABB(p,P) && return false
-    for i in 1:length(P.normals)
-        !inrange(dot(p, P.normals[i]), P.nextrema[i]) && return false
-    end
-    true
+    @all [!ininterval(dot(p, P.normals[i]), P.nextrema[i]) for i in 1:length(P.normals)]
 end
 colliding(P::Polygon, p::Vec{2}) = colliding(p,P)
 function colliding(p::Vec{2}, C::Compound2D)
     !pointinAABB(p,C) && return false
-    for P in C.parts
-        colliding(p,P) && return true
-    end
-    false
+    @any [colliding(p,P) for P in C.parts]
 end
 colliding(C::Compound2D, p::Vec{2}) = colliding(p,C)
 ## Shape collision
@@ -151,20 +143,12 @@ end
 colliding(P::Polygon, C::Circle) = colliding(C,P)
 function colliding(P1::Polygon, P2::Polygon)
     AABBseparated(P1,P2) && return false
-    for i in 1:length(P1.normals)
-        is_separating_axis(P1,P2,i) && return false
-    end
-    for i in 1:length(P2.normals)
-        is_separating_axis(P2,P1,i) && return false
-    end
-    true
+    !(@any [is_separating_axis(P1,P2,i) for i in 1:length(P1.normals)]) &&
+    !(@any [is_separating_axis(P2,P1,i) for i in 1:length(P2.normals)])
 end
 function colliding(C::Compound2D, S::Shape2D)
     AABBseparated(C,S) && return false
-    for P in C.parts
-        colliding(P,S) && return true
-    end
-    false
+    @any [colliding(P,S) for P in C.parts]
 end
 colliding(S::Circle, C::Compound2D) = colliding(C,S)   # colliding(S::Shape2D, C::Compound2D) is type-ambiguous?
 colliding(S::Polygon, C::Compound2D) = colliding(C,S)
@@ -179,17 +163,17 @@ end
 function colliding_ends_free(L::Line, P::Polygon)
     AABBseparated(L,P) && return false
     is_separating_axis(L,P) && return false
-    for i in 1:length(P.normals)
-        is_separating_axis(P,L,i) && return false
-    end
-    true
+    !(@any [is_separating_axis(P,L,i) for i in 1:length(P.normals)])
 end
 colliding_ends_free(B::Basic2D, L::Line) = colliding_ends_free(L,B) 
 colliding(L::Line, B::Basic2D) = colliding_ends_free(L,B) || colliding(L.v,B) || colliding(L.w,B)
 colliding(B::Basic2D, L::Line) = colliding(L,B)
-colliding(S::Line, C::Compound2D) = colliding(C,S)
-colliding_ends_free(S::Line, C::Compound2D) = colliding(C,S)
-colliding_ends_free(C::Compound2D, S::Line) = colliding(C,S)
+colliding(L::Line, C::Compound2D) = colliding(C,L)
+function colliding_ends_free(L::Line, C::Compound2D)
+    AABBseparated(L,C) && return false
+    @any [colliding_ends_free(L,P) for P in C.parts]
+end
+colliding_ends_free(C::Compound2D, L::Line) = colliding(C,L)
 
 # ---------- Transformations ----------
 
@@ -205,18 +189,18 @@ inflate{T}(C::Compound2D{T}, eps; roundcorners = true) = Compound2D(Shape2D{T}[i
 
 # ---------- Closest Point ---------
 
-function closest(p::Vec{2}, C::Circle)
+@unfix function closest(p::Vec{2}, C::Circle)
     xmin = C.c + C.r*unit(p - C.c)
     norm2(p-xmin), xmin
 end
-closest(p::Vec{2}, C::Circle, W::AbstractMatrix) = closest(p, C, eigfact(full(W)))
-function closest(p::Vec{2}, C::Circle, EF::Base.Eigen)
+@unfix closest(p::Vec{2}, C::Circle, W::Mat{2,2}) = closest(p, C, eigfact(full(W)))
+@unfix function closest(p::Vec{2}, C::Circle, EF::Base.Eigen)
     ctop = p - C.c
-    v1 = Vec(EF.vectors[1:2,1])
-    v2 = Vec(EF.vectors[1:2,2])
+    v1 = Vec(EF[:vectors][1:2,1])
+    v2 = Vec(EF[:vectors][1:2,2])
     p1 = dot(v1, ctop)
     p2 = dot(v2, ctop)
-    s1, s2 = EF.values
+    s1, s2 = EF[:values]
     lambda = 1.
     f = (p1*s1/(lambda+s1))^2 + (p2*s2/(lambda+s2))^2 - C.r^2
     while abs(f) > 1e-8
@@ -236,8 +220,8 @@ function closest(p::Vec{2}, C::Circle, EF::Base.Eigen)
     xmin = C.c + v1*p1*s1/(lambda+s1) + v2*p2*s2/(lambda+s2)
     s1*(p1-p1*s1/(lambda+s1))^2 + s2*(p2-p2*s2/(lambda+s2))^2, xmin
 end
-closest(p::Vec{2}, P::Polygon) = closest(p, P.points)
-function closest(p::Vec{2}, points::Vector)
+@unfix closest(p::Vec{2}, P::Polygon) = closest_polypts(p, P.points)
+@unfix function closest_polypts(p::Vec{2}, points::Vector)
     N = length(points)
     d2min, vmin = Inf, points[1]
     for i in 1:N
@@ -251,12 +235,12 @@ function closest(p::Vec{2}, points::Vector)
     end
     d2min, vmin
 end
-function closest(p::Vec{2}, P::Polygon, W::AbstractMatrix)
-    L = Matrix2x2(chol(W))
-    xmin = inv(L)*closest(L*p, eltype(P.points)[L*pt for pt in P.points])[2]
-    dot(xmin-p, Matrix2x2(W)*(xmin-p)), xmin
+@unfix function closest(p::Vec{2}, P::Polygon, W::Mat{2,2})
+    L = Mat(full(chol(full(W))))
+    xmin = inv(L)*closest_polypts(L*p, eltype(P.points)[L*pt for pt in P.points])[2]
+    dot(xmin-p, W*(xmin-p)), xmin
 end
-function closest(p::Vec{2}, C::Compound2D)
+@unfix function closest(p::Vec{2}, C::Compound2D)
     d2min, vmin = Inf, p
     for P in C.parts
         d2, v = closest(p, P)
@@ -266,7 +250,7 @@ function closest(p::Vec{2}, C::Compound2D)
     end
     d2min, vmin
 end
-function closest(p::Vec{2}, C::Compound2D, W::AbstractMatrix)  # refactor/combine with above... someday
+@unfix function closest(p::Vec{2}, C::Compound2D, W::Mat{2,2})  # refactor/combine with above... someday
     d2min, vmin = Inf, p
     for P in C.parts
         d2, v = closest(p, P, W)
@@ -277,11 +261,11 @@ function closest(p::Vec{2}, C::Compound2D, W::AbstractMatrix)  # refactor/combin
     d2min, vmin
 end
 
-function close(p::Vec{2}, P::Basic2D, W::AbstractMatrix, r2)  # pretty janky
+@unfix function closeR(p::Vec{2}, P::Basic2D, W::Mat{2,2}, r2)  # pretty janky
     cplist = [closest(p, P, W)]
     cplist[1][1] < r2 ? cplist[1:1] : cplist[1:0]
 end
-close(p::Vec{2}, C::Compound2D, W::AbstractMatrix, r2) = sort!(vcat([close(p, P, W, r2) for P in C.parts]...), by=first)
+@unfix closeR(p::Vec{2}, C::Compound2D, W::Mat{2,2}, r2) = sort!(vcat([closeR(p, P, W, r2) for P in C.parts]...), by=first)
 
 # ---------- Plotting ----------
 

@@ -2,36 +2,38 @@ export plot, plot_rectangle, plot_circle, plot_ellipse, plot_bounds, plot_graph,
 
 rectangle_corners(lo, hi) = ([lo[1],hi[1],hi[1],lo[1],lo[1]], [lo[2],lo[2],hi[2],hi[2],lo[2]])
 
-function plot_rectangle(r; kwargs...)
-    plt[:fill](rectangle_corners(r[:,1], r[:,2])...,
-             edgecolor="black", zorder=0; kwargs...)
+function plot_rectangle(lo, hi; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
+    X, Y = rectangle_corners(lo, hi)
+    plt[:fill](clamp(X, xmin, xmax),
+               clamp(Y, ymin, ymax),
+               edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_polygon(pts; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     XY = hcat(pts...)'
     plt[:fill](clamp(XY[:,1], xmin, xmax),
-             clamp(XY[:,2], ymin, ymax),
-             edgecolor="black", zorder=0; kwargs...)
+               clamp(XY[:,2], ymin, ymax),
+               edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_circle(c, r; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     plt[:fill](clamp(c[1] + r*cos(linspace(0, 2pi, 40)), xmin, xmax),
-             clamp(c[2] + r*sin(linspace(0, 2pi, 40)), ymin, ymax),
-             edgecolor="black", zorder=0; kwargs...)
+               clamp(c[2] + r*sin(linspace(0, 2pi, 40)), ymin, ymax),
+               edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_ellipse(c, a, b, t; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     XY = [a*cos(linspace(0, 2pi, 40)) b*sin(linspace(0, 2pi, 40))]*[cos(t) sin(t); -sin(t) cos(t)]
     plt[:fill](clamp(c[1] + XY[:,1], xmin, xmax),
-             clamp(c[2] + XY[:,2], ymin, ymax),
-             edgecolor="black", zorder=0; kwargs...)
+               clamp(c[2] + XY[:,2], ymin, ymax),
+               edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_ellipse(c, Sigma; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
-    XY = [cos(linspace(0, 2pi, 40)) sin(linspace(0, 2pi, 40))]*chol(Sigma)
+    XY = [cos(linspace(0, 2pi, 40)) sin(linspace(0, 2pi, 40))]*chol(full(Sigma))
     plt[:fill](clamp(c[1] + XY[:,1], xmin, xmax),
-             clamp(c[2] + XY[:,2], ymin, ymax),
-             edgecolor="black", zorder=0; kwargs...)
+               clamp(c[2] + XY[:,2], ymin, ymax),
+               edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_bounds(lo = zeros(2), hi = ones(2))

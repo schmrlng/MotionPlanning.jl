@@ -1,13 +1,16 @@
 export BoundedEuclideanStateSpace, UnitHypercube
 
 ## Metric Space Instantiation 
-BoundedEuclideanStateSpace(d::Int, lo::Vector, hi::Vector) = RealVectorStateSpace(d, lo, hi, Euclidean(), Identity())
-UnitHypercube(d::Int) = BoundedEuclideanStateSpace(d, zeros(d), ones(d))
+BoundedEuclideanStateSpace{d}(lo::Vec{d}, hi::Vec{d}) = RealVectorStateSpace(lo, hi, Euclidean(), Identity())
+UnitHypercube{T<:AbstractFloat}(d::Int, ::Type{T} = Float64) = BoundedEuclideanStateSpace(zero(Vec{d,T}), one(Vec{d,T}))
 
-waypoints{S}(v::S, w::S, ::Euclidean) = S[v, w]
-function time_waypoint{S}(v::S, w::S, M::Euclidean, t)
+colwise{S<:Vec}(d::Euclidean, v::S, W::Vector{S}) = colwise(d, full(v), hcat(W...))
+colwise(d::Euclidean, v::Vec, W::Matrix) = colwise(d, full(v), W)
+helper_data_structures{S}(V::Vector{S}, M::Euclidean) = (TreeDistanceDS(KDTree(hcat(V...), M; reorder=false)), EmptyControlDS())
+
+waypoints{S}(::Euclidean, v::S, w::S) = S[v, w]
+function time_waypoint(M::Euclidean, v, w, t)
     n = evaluate(M, v, w)
     v + min(t/n, 1)*(w - v)
 end
-cost_waypoint{S}(v::S, w::S, M::Euclidean, c) = time_waypoint(v, w, M, c)
-defaultNN(::Euclidean, init) = EuclideanNN_KDTree(typeof(init)[], Euclidean(), init)
+cost_waypoint(M::Euclidean, v, w, c) = time_waypoint(M, v, w, c)

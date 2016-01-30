@@ -1,4 +1,5 @@
-export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path, cost_discretize_solution!, cost_space_solution!
+export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path
+export cost_discretize_solution!, cost_space_solution!, time_discretize_solution!
 
 ### ADAPTIVE-SHORTCUT (Hsu 2000)
 
@@ -11,10 +12,10 @@ function shortcut(path::Path, CC::CollisionChecker)
         return path[[1,end]]
     end
     mid = ceil(Int, N/2)
-    return [shortcut(path[1:mid], CC)[1:end-1], shortcut(path[mid:end], CC)]
+    return [shortcut(path[1:mid], CC)[1:end-1]; shortcut(path[mid:end], CC)]
 end
 
-function cut_corner(v1::AbstractVector, v2::AbstractVector, v3::AbstractVector, CC::CollisionChecker)
+@unfix function cut_corner(v1::Vec, v2::Vec, v3::Vec, CC::CollisionChecker)
     m1 = (v1 + v2)/2
     m2 = (v3 + v2)/2
     while !is_free_motion(m1, m2, CC)
@@ -29,39 +30,49 @@ function adaptive_shortcut(path::Path, CC::CollisionChecker, iterations::Int = 1
         path = short_path
     end
     for i in 1:iterations
-        path = [path[1:1], vcat([cut_corner(path[j-1:j+1]..., CC)[2:3] for j in 2:length(path)-1]...), path[end:end]]
+        path = [path[1:1]; vcat([cut_corner(path[j-1:j+1]..., CC)[2:3] for j in 2:length(path)-1]...); path[end:end]]
         while (short_path = shortcut(path, CC)) != path
             path = short_path
         end
     end
-    return path, sum(mapslices(norm, diff(hcat(path...), 2), 1))
+    return path, cumsum([0; vec(mapslices(norm, diff(hcat(path...), 2), 1))])
 end
 
 function adaptive_shortcut!(P::MPProblem, iterations::Int = 10)
     P.status != :solved && error("Cannot post-process unsolved problem! (adaptive-shortcut)")
-    (!isa(P.SS, RealVectorMetricSpace) || P.SS.dist != Euclidean()) && error("Adaptive-shortcut requires Euclidean SS")
+    (!isa(P.SS, RealVectorStateSpace) || P.SS.dist != Euclidean()) && error("Adaptive-shortcut requires Euclidean SS")
     S = P.solution
-    smoothed_path, smoothed_cost = adaptive_shortcut(P.V.V[S.metadata["path"]], P.CC, iterations)
+    smoothed_path, smoothed_cumcost = adaptive_shortcut(P.V.V[S.metadata["path"]], P.CC, iterations)
     S.metadata["smoothed_path"] = smoothed_path
-    S.metadata["smoothed_cost"] = smoothed_cost
-    smoothed_cost
+    S.metadata["smoothed_cumcost"] = smoothed_cumcost
+    S.metadata["smoothed_cost"] = smoothed_cumcost[end]
+    smoothed_cumcost[end]
 end
+
+### Smoothing
+
+function smooth_solution!(P::MPProblem)
+    P.status != :solved && error("Cannot post-process unsolved problem! (adaptive-shortcut)")
+    isa(P.SS, RealVectorStateSpace) && isa(P.SS.dist, Euclidean) && return adaptive_shortcut!(P)
+    # isa(P.SS, SE2StateSpace) && isa(P.SS.dist, SimpleCarMetric) && return 
+end
+
 
 ### Path discretization (Euclidean)
 
-function discretize_path(path0::Path, dx)
-    path = path0[1:1]
-    for i in 2:length(path0)
-         norm(path0[i] - path[end]) > 2dx/3 && push!(path, path0[i])  # cut out small waypoint steps
-    end
-    dpath = path[1:1]
-    for i in 2:length(path)
-        segment_length = norm(path[i] - path[i-1])
-        M = ceil(segment_length / dx)
-        append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
-    end
-    map(full, dpath)
-end
+# function discretize_path(path0::Path, dx)
+#     path = path0[1:1]
+#     for i in 2:length(path0)
+#          norm(path0[i] - path[end]) > 2dx/3 && push!(path, path0[i])  # cut out small waypoint steps
+#     end
+#     dpath = path[1:1]
+#     for i in 2:length(path)
+#         segment_length = norm(path[i] - path[i-1])
+#         M = ceil(segment_length / dx)
+#         append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
+#     end
+#     map(full, dpath)
+# end
 
 ### Reeds-Shepp fix inexact steering (okay not really) and discretize
 
@@ -99,18 +110,23 @@ end
 # end
 
 function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
-    sol = P.solution.metadata["path"]
-    costs = P.solution.metadata["cumcost"]
-    x0 = state2workspace(P.V[sol[1]], P.SS)
+    if haskey(P.solution.metadata, "smoothed_path")
+        path = P.solution.metadata["smoothed_path"]
+        costs = P.solution.metadata["smoothed_cumcost"]
+    else
+        path = P.V[P.solution.metadata["path"]]
+        costs = P.solution.metadata["cumcost"]
+    end
+    x0 = path[1]
     dpath = typeof(x0)[x0]
     c = dc
-    for i in 1:length(sol)-1
+    for i in 1:length(path)-1
         while c < costs[i+1]
-            push!(dpath, state2workspace(cost_waypoint(P.V[sol[i]], P.V[sol[i+1]], P.SS, c - costs[i]), P.SS))
+            push!(dpath, cost_waypoint(P.SS, path[i], path[i+1], c - costs[i]))
             c = c + dc
         end
     end
-    push!(dpath, state2workspace(P.V[sol[end]], P.SS))
+    push!(dpath, path[end])
     P.solution.metadata["discretized_path"] = dpath
 end
 
@@ -124,6 +140,8 @@ function cost_space_solution!(P::MPProblem, n)
     end
     error("Something must be seriously wrong with costs to get here...")
 end
+
+time_discretize_solution!(P::MPProblem, dt) = cost_discretize_solution!(P::MPProblem, dt) # TODO: TEMP
 
 ### Linear Quadratic Discretization
 
@@ -140,11 +158,11 @@ end
 
 ### General (should perhaps not live in this package?)
 
-function discretize_path(P::MPProblem, dt)
-    if P.SS.dist == Euclidean()
-        adaptive_shortcut!(P)
-        P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["smoothed_path"], dt)
-        return P.solution.metadata["discretized_path"]   # TODO: get method for MPSolution type
-    end
-    P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.V, P.SS)
-end
+# function discretize_path(P::MPProblem, dt)
+#     if P.SS.dist == Euclidean()
+#         adaptive_shortcut!(P)
+#         P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["smoothed_path"], dt)
+#         return P.solution.metadata["discretized_path"]   # TODO: get method for MPSolution type
+#     end
+#     P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.V, P.SS)
+# end

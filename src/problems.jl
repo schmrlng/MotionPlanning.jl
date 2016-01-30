@@ -1,34 +1,39 @@
 import Base.copy
 export MPProblem, MPSolution
 
-type MPSolution
+type MPSolution{T}
     status::Symbol
-    cost::Float64
+    cost::T
     elapsed::Float64
     metadata::Dict
 end
 
-type MPProblem
+type MPProblem{T<:AbstractFloat}
     SS::StateSpace
     init::State
     goal::Goal
     CC::CollisionChecker
-    V::NearNeighborCache
+    V::SampleSet
     config_name::ASCIIString
     status::Symbol
-    solution::MPSolution
+    solution::MPSolution{T}
 
     function MPProblem(SS::StateSpace,
                        init::State,
                        goal::Goal,
                        CC::CollisionChecker,
-                       V::NearNeighborCache,
-                       config_name::ASCIIString="$(SS.dim)D $(typeof(SS))")
+                       V::SampleSet,
+                       config_name::ASCIIString="$(dim(SS))D $(typeof(SS))")
         new(SS, init, goal, CC, V, config_name, "not yet solved")
     end
 end
 
-MPProblem(SS::StateSpace, init::State, goal::Goal, CC::CollisionChecker) = MPProblem(SS, init, goal, CC, defaultNN(SS, init))
+function MPProblem{T}(SS::StateSpace{T}, init::State, goal::Goal, CC::CollisionChecker)
+    if isa(init, Vector)
+        init = Vec(init)
+    end
+    MPProblem{T}(SS, init, goal, CC, defaultNN(SS, init))
+end
 function copy(P::MPProblem)
     Pcopy = MPProblem(P.SS, P.init, P.goal, P.CC, P.V, P.config_name)
     Pcopy.status = P.status
@@ -36,8 +41,8 @@ function copy(P::MPProblem)
     Pcopy
 end
 
-plot_path(SS::StateSpace, V::NearNeighborCache, sol; kwargs...) = plot_path(V[sol], SS; kwargs...)
-plot_tree(SS::StateSpace, V::NearNeighborCache, A; kwargs...) = plot_tree(V.V, A, SS; kwargs...)
+plot_path(SS::StateSpace, V::SampleSet, sol; kwargs...) = plot_path(V[sol], SS; kwargs...)
+plot_tree(SS::StateSpace, V::SampleSet, A; kwargs...) = plot_tree(V.V, A, SS; kwargs...)
 
 function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
     SS && plot(P.SS)
