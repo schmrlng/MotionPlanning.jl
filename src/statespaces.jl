@@ -1,9 +1,11 @@
 export RealVectorStateSpace, SE2StateSpace
 export Identity, VectorView, First2Vector2, Select2Vector2, OutputMatrix, ExtractVector
-export sample_space, state2workspace, volume, dim, waypoints, workspace_waypoints, collision_waypoints, time_waypoint, cost_waypoint
+export sample_space, state2workspace, volume, dim, propagate, collision_waypoints, waypoints
 export in_state_space, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering, controltype
 
 #====================== Implementation Notes ======================
+TODO: the information below is outdated.
+
 To specify a new state space (with associated distance function M,
 a Metric or QuasiMetric) the user must specify:
 1. evaluate(M, v, w)
@@ -37,6 +39,13 @@ immutable SE2StateSpace{T, M<:PreMetric, W<:State2Workspace} <: StateSpace{T}
     s2w::W
 end
 
+### Utilities
+changeprecision{T<:AbstractFloat}(::Type{T}, SS::RealVectorStateSpace) =
+    RealVectorStateSpace(map(x -> changeprecision(T,x), (SS.lo, SS.hi, SS.dist, SS.s2w))...)
+changeprecision{T<:AbstractFloat}(::Type{T}, SS::SE2StateSpace) =
+    SE2StateSpace(map(x -> changeprecision(T,x), (SS.lo, SS.hi, SS.dist, SS.s2w))...)
+changeprecision{T<:AbstractFloat}(::Type{T}, s2w::State2Workspace) = s2w
+
 ### Sampling
 sample_space(SS::RealVectorStateSpace) = (SS.lo + rand(typeof(SS.lo)).*(SS.hi-SS.lo))
 sample_space{T,M,W}(SS::SE2StateSpace{T,M,W}) = SE2State(SS.lo + rand(Vec{2,T}).*(SS.hi-SS.lo), convert(T, 2pi*rand(T)))
@@ -61,6 +70,8 @@ immutable OutputMatrix{M,N,T<:AbstractFloat} <: State2Workspace
     C::Mat{M,N,T}
 end
 immutable ExtractVector <: State2Workspace end
+changeprecision{T<:AbstractFloat}(::Type{T}, s2w::OutputMatrix) = OutputMatrix(changeprecision(T, s2w.C))
+
 @unfix state2workspace(v::State, SS::StateSpace) = state2workspace(v, SS.s2w)
 @unfix state2workspace(v::State, s2w::Identity) = v
 @unfix state2workspace(v::Vec, s2w::VectorView) = Vec(v[s2w.r])
@@ -80,67 +91,99 @@ immutable ExtractVector <: State2Workspace end
 end
 @unfix workspace2state(w::Vec, v::Vec, s2w::First2Vector2) = setindex(setindex(v, w[1], 1), w[2], 2)
 @unfix workspace2state(w::Vec, v::Vec, s2w::Select2Vector2) = setindex(setindex(v, w[1], s2w.a), w[2], s2w.b)
-@unfix workspace2state(w::Vec, v::Vec, s2w::OutputMatrix) = v + pinv(s2w.C)*(w - s2w.C*v)
+@unfix workspace2state(w::Vec, v::Vec, s2w::OutputMatrix) = v + Vec(dense(s2w.C)\dense(w - s2w.C*v))
 @unfix workspace2state(w::Vec{2}, v::SE2State, s2w::ExtractVector) = SE2State(w, v.t)
 
-### Waypoints
+### Propagation and Waypoints
 setup_steering(SS::StateSpace, r) = setup_steering(SS.dist, r)
 setup_steering(d::PreMetric, r) = nothing
-setup_steering(d::ChoppedLowerBoundedPreMetric, r) = (d.chopval = r + eps(r))
-controltype(d::PreMetric) = NullControl
+setup_steering(d::ChoppedPreMetric, r) = (d.chopval = r + eps(r))
+controltype(d::PreMetric) = NullControl  # TODO: not sure if I even use this anymore, but will be relevant for caching
 
-waypoints{S<:State}(SS::StateSpace, v::S, w::S) = waypoints(SS.dist, v, w)
-time_waypoint{S<:State}(SS::StateSpace, v::S, w::S, t) = time_waypoint(SS.dist, v, w, t)
-cost_waypoint{S<:State}(SS::StateSpace, v::S, w::S, c) = cost_waypoint(SS.dist, v, w, c)
-workspace_waypoints{S<:State}(SS::StateSpace, v::S, w::S) = workspace_waypoints(SS.dist, v, w, SS.s2w)
-collision_waypoints{S<:State}(SS::StateSpace, v::S, w::S) = collision_waypoints(SS.dist, v, w, SS.s2w)
-# workspace_waypoints(d::PreMetric, v::State, w::State, ::Identity) = waypoints(d, v, w)
+function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::PiecewiseControl, t::AbstractVector{T})
+    path = typeof(v)[]
+    for ui in splitcontrol(u, t)[1:end-1]
+        v = propagate(d, v, ui)
+        push!(path, v)
+    end
+    path
+end
 
-## CLBM
-waypoints(CLBM::ChoppedLowerBoundedPreMetric, v, w) = waypoints(CLBM.m, v, w)
-time_waypoint(CLBM::ChoppedLowerBoundedPreMetric, v, w, t) = time_waypoint(CLBM.m, v, w, t)
-cost_waypoint(CLBM::ChoppedLowerBoundedPreMetric, v, w, c) = cost_waypoint(CLBM.m, v, w, c)
-workspace_waypoints(CLBM::ChoppedLowerBoundedPreMetric, v, w) = workspace_waypoints(CLBM.m, v, w, SS.s2w)
-collision_waypoints(CLBM::ChoppedLowerBoundedPreMetric, v, w) = collision_waypoints(CLBM.m, v, w, SS.s2w)
+## ZeroOrderHoldControl
+function propagate(d::PreMetric, v::State, zoh::ZeroOrderHoldControl)
+    for u in zoh
+        v = propagate(d, v, u)
+    end
+    v
+end
+function collision_waypoints(d::PreMetric, v::State, zoh::ZeroOrderHoldControl)
+    path = typeof(v)[]
+    for u in zoh
+        append!(path, collision_waypoints(d, v, u))
+        v = propagate(d, v, u)
+    end
+    push!(path, v)
+end
 
-## Defaults (should be extended for best performance)
-workspace_waypoints(d::PreMetric, v::State, w::State, s2w::State2Workspace) = [state2workspace(x, s2w) for x in waypoints(d, v, w)]
-collision_waypoints(d::PreMetric, v::State, w::State, s2w::State2Workspace) = workspace_waypoints(d, v, w, s2w)
+## Waypoints
+function waypoints(d::PreMetric, v::State, w::State, n::Int)
+    u = steering_control(d, v, w)
+    t = duration(u)
+    propagate(d, v, u, linspace(typeof(t)(0), t, n))
+end
+function waypoints(d::PreMetric, v::State, w::State, dt::AbstractFloat)
+    u = steering_control(d, v, w)
+    t = duration(u)
+    propagate(d, v, u, [typeof(t)(0):dt:t; t])
+end
+collision_waypoints(d::PreMetric, v::State, w::State) = push!(collision_waypoints(d, v, steering_control(d,v,w)), w)
+
+## StateSpace and CLBM
+for f in (:propagate, :collision_waypoints, :waypoints, :steering_control)
+    @eval $f(SS::StateSpace, args...) = $f(SS.dist, args...)
+    @eval $f(CLBM::ChoppedPreMetric, args...) = $f(CLBM.m, args...)
+end
 
 ### Validity Checking
 in_state_space{N}(v::Vec{N}, SS::StateSpace) = @all [SS.lo[i] <= v[i] <= SS.hi[i] for i in 1:N]
 in_state_space(v::SE2State, SS::SE2StateSpace) = (SS.lo[1] < v.x[1] < SS.hi[1] && SS.lo[2] < v.x[2] < SS.hi[2])
-is_free_state(v::State, CC::CollisionChecker, SS::StateSpace) = in_state_space(v, SS) && is_free_state(state2workspace(v, SS), CC)
+is_free_state(v::State, CC::CollisionChecker, SS::StateSpace) =
+    in_state_space(v, SS) && is_free_state(state2workspace(v, SS), CC)
 function is_free_motion(v::State, w::State, CC::CollisionChecker, SS::StateSpace)
     wps = collision_waypoints(SS, v, w)
-    @all [(in_state_space(wps[i], SS) && is_free_motion(wps[i], wps[i+1], CC)) for i in 1:length(wps)-1]
+    @all [(in_state_space(wps[i], SS) &&
+           is_free_motion(state2workspace(wps[i], SS.s2w), state2workspace(wps[i+1], SS.s2w), CC))
+           for i in 1:length(wps)-1]
 end
-is_free_path(p::Path, CC::CollisionChecker, SS::StateSpace) = @all [is_free_motion(p[i], p[i+1], CC, SS) for i in 1:length(p)-1]
+is_free_path(p::Path, CC::CollisionChecker, SS::StateSpace) =
+    @all [is_free_motion(p[i], p[i+1], CC, SS) for i in 1:length(p)-1]
 
 ### Near Neighbor Setup (should be extended for best performance)
 defaultNN(SS::StateSpace, init) = defaultNN(SS.dist, init)
 defaultNN(d::Metric, init) = MetricNN(typeof(init)[init], d, init)
 defaultNN(d::QuasiMetric, init) = QuasiMetricNN(typeof(init)[init], d, init)
-function defaultNN{M}(d::ChoppedLowerBoundedPreMetric{M}, init)
+function defaultNN{M}(d::ChoppedPreMetric{M}, init)
     M <: Metric && return MetricNN(typeof(init)[init], d, init)
     M <: QuasiMetric && return QuasiMetricNN(typeof(init)[init], d, init)
-    error("Unsupported ChoppedLowerBoundedPreMetric")
+    error("Unsupported ChoppedPreMetric")
 end
 # pairwise_distances(d::PreMetric, V) = # TODO: implement this in a reasonable manner with ControlInfo
 
 ### Plotting
 plot(SS::StateSpace) = plot_bounds(SS.lo, SS.hi)
+plot_waypoints(SS::StateSpace, v::State, w::State) =
+    map(x -> state2workspace(x, SS.s2w), isa(SS.dist, Euclidean) ? collision_waypoints(SS,v,w) : waypoints(SS,v,w,10))
 function plot_path(p::Path, SS::StateSpace; kwargs...)
-    wps = hcat([hcat(workspace_waypoints(SS, p[i], p[i+1])...) for i in 1:length(p)-1]...)
+    wps = hcat([hcat(plot_waypoints(SS, p[i], p[i+1])...) for i in 1:length(p)-1]...)
     plot_path(wps; kwargs...)
 end
 function plot_tree(V::Path, A::Vector{Int}, SS::StateSpace; kwargs...)    # V is a vector of states, i.e. a Path
     VW = [state2workspace(v, SS) for v in V]
     pts = hcat(VW[find(A)]...)
-    scatter(pts[1,:], pts[2,:], zorder=1; kwargs...)
-    X = vcat([[hcat(workspace_waypoints(SS, V[A[w]], V[w])...)[1,:]'; nothing] for w in find(A)]...)
-    Y = vcat([[hcat(workspace_waypoints(SS, V[A[w]], V[w])...)[2,:]'; nothing] for w in find(A)]...)
-    plt[:plot](X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
+    plt.scatter(pts[1,:], pts[2,:], zorder=1; kwargs...)
+    X = vcat([[hcat(plot_waypoints(SS, V[A[w]], V[w])...)[1,:]; nothing] for w in find(A)]...)
+    Y = vcat([[hcat(plot_waypoints(SS, V[A[w]], V[w])...)[2,:]; nothing] for w in find(A)]...)
+    plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
 
 include("statespaces/geometric.jl")

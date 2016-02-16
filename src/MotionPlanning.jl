@@ -1,24 +1,11 @@
 module MotionPlanning
 
-using PyPlot
-using ArrayViews
+import PyPlot; const plt = PyPlot
 using Devectorize
 using Iterators
-using GZip
-using Grid
-# using HypothesisTests
 using Distances
 using NearestNeighbors
-using SparseVectors
-# using KDTrees
-# using Graphs
-# using ImmutableArrays
 using FixedSizeArrays
-# using Convex
-# using ECOS
-
-### Imports to be extended
-import PyPlot.plot
 
 ### Includes
 include("primitivetypes.jl")
@@ -30,7 +17,7 @@ include("statespaces.jl")
 include("problems.jl")
 include("sampling.jl")
 include("planners.jl")
-include("postprocessors.jl")
+# include("postprocessors.jl")
 include("plotting.jl")
 
 # TODO: test suite!

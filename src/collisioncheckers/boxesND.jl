@@ -9,7 +9,9 @@ end
 BoxBounds(lo::AbstractVector, hi::AbstractVector) = BoxBounds(Vec(lo), Vec(hi))
 BoxBounds(lohi::Matrix) = BoxBounds(Vec(lohi[:,1]), Vec(lohi[:,2]))
 BoxBounds(BB::BoxBounds) = BB
-inflate(BB::BoxBounds, eps) = eps > 0 ? BoxBounds(BB.lo - eps, BB.hi + eps) : BB
+inflate{N,T}(BB::BoxBounds{N,T}, eps) = eps > 0 ? BoxBounds(BB.lo - T(eps), BB.hi + T(eps)) : BB
+changeprecision{T<:AbstractFloat}(::Type{T}, BB::BoxBounds) =
+    BoxBounds(changeprecision(T, BB.lo), changeprecision(T, BB.hi))
 
 type PointRobotNDBoxes{N,T} <: SweptCollisionChecker
     boxes::Vector{BoxBounds{N,T}}
@@ -18,13 +20,14 @@ end
 PointRobotNDBoxes{N,T}(boxes::Vector{BoxBounds{N,T}}) = PointRobotNDBoxes(boxes, 0)
 PointRobotNDBoxes{T}(box_list::Vector{Matrix{T}}) = PointRobotNDBoxes(map(BoxBounds, box_list))
 PointRobotNDBoxes{T}(boxes::Array{T,3}) = PointRobotNDBoxes(vec(mapslices(BoxBounds, boxes, [1,2])))
-PointRobotNDBoxes(box_hcat::Matrix) = PointRobotNDBoxes(reshape(box_hcat, size(box_hcat, 1), 2, div(size(box_hcat, 2), 2)))
+PointRobotNDBoxes(boxhcat::Matrix) = PointRobotNDBoxes(reshape(boxhcat, size(boxhcat, 1), 2, div(size(boxhcat, 2), 2)))
+changeprecision{T<:AbstractFloat}(::Type{T}, CC::PointRobotNDBoxes) = PointRobotNDBoxes(changeprecision(T, CC.boxes))
 
 @unfix is_free_state(v::Vec, CC::PointRobotNDBoxes) = is_free_state(v, CC.boxes)
 @unfix is_free_motion(v::Vec, w::Vec, CC::PointRobotNDBoxes) = (CC.count += 1; is_free_motion(v, w, CC.boxes))
-is_free_path(path::Path, CC::PointRobotNDBoxes) = is_free_path(path, CC.boxes)
+is_free_path(P::Path, CC::PointRobotNDBoxes) = is_free_path(P, CC.boxes)
 
-inflate(CC::PointRobotNDBoxes, eps) = eps > 0 ? PointRobotNDBoxes([inflate(BB, eps) for BB in CC.boxes]) : CC  # TODO: rounded corners/edges
+inflate{N,T}(CC::PointRobotNDBoxes{N,T}, eps) = eps > 0 ? PointRobotNDBoxes([inflate(B, T(eps)) for B in CC.boxes]) : CC
 addobstacle(CC::PointRobotNDBoxes, o) = PointRobotNDBoxes(vcat(CC.boxes, BoxBounds(o)))
 @unfix addblocker(CC::PointRobotNDBoxes, v::Vec, r) = addobstacle(CC, BoxBounds(v-r, v+r))
 @unfix closest(p::Vec, CC::PointRobotNDBoxes, W::Mat) = closest(p, CC.boxes, W)
@@ -38,7 +41,8 @@ plot(CC::PointRobotNDBoxes, lo = zeros(2), hi = ones(2); kwargs...) =
 
 @unfix is_free_state{N}(v::Vec{N}, BB::BoxBounds{N}) = @any [!(BB.lo[i] <= v[i] <= BB.hi[i]) for i in 1:N]
 @unfix is_free_state{N,T}(v::Vec{N}, BL::Vector{BoxBounds{N,T}}) = @all [is_free_state(v, BL[k]) for k in 1:length(BL)]
-@unfix is_free_motion_broadphase{N}(l::Vec{N}, h::Vec{N}, BB::BoxBounds{N}) = @any [BB.hi[i] < l[i] || BB.hi[i] > h[i] for i in 1:N]
+@unfix is_free_motion_broadphase{N}(l::Vec{N}, h::Vec{N}, BB::BoxBounds{N}) =
+    @any [BB.hi[i] < l[i] || BB.hi[i] > h[i] for i in 1:N]
 @unfix function is_free_motion{N}(v::Vec{N}, w::Vec{N}, BB::BoxBounds{N})
     v_to_w = w - v
     corner = (a .< b) .* b + (1 - (a .< b)) .* c  # TODO: ifelse (blend) for FixedSizeArrays
@@ -50,7 +54,7 @@ end
     bb_max = max(v,w)
     @all [is_free_motion_broadphase(bb_min, bb_max, BL[k]) && is_free_motion(v, w, BL[k]) for k in 1:length(BL)]
 end
-is_free_path{B<:BoxBounds}(path::Path, BL::Vector{B}) = @all [is_free_motion(path[i], path[i+1], BL) for i in 1:length(BL)-1]
+is_free_path{B<:BoxBounds}(P::Path, BL::Vector{B}) = @all [is_free_motion(P[i], P[i+1], BL) for i in 1:length(BL)-1]
 
 ### Closest Point
 
@@ -59,14 +63,14 @@ is_free_path{B<:BoxBounds}(path::Path, BL::Vector{B}) = @all [is_free_motion(pat
     # problem = minimize(quad_form(v-p, W), view(o,:,1) <= v, v <= view(o,:,2))
     # solve!(problem, ECOS.ECOSSolver(verbose=false))
     # return (problem.optval, vec(v.value))
-    L = chol(full(W))
-    vmin = Vec(bvls(L, L*full(p), full(BB.lo), full(BB.hi)))
+    L = chol(dense(W))
+    vmin = Vec(bvls(L, L*dense(p), dense(BB.lo), dense(BB.hi)))
     d2min = dot(vmin - p, W*(vmin - p))
     d2min, vmin
 end
 
 @unfix function closest{N,T}(p::Vec{N}, BL::Vector{BoxBounds{N,T}}, W::Mat{N,N})
-    d2min, vmin = Inf, p
+    d2min, vmin = T(Inf), p
     for k = 1:length(BL)
         (d2, v) = closest(p, BL[k], W)
         if d2 < d2min

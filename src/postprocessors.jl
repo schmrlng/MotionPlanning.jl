@@ -71,7 +71,7 @@ end
 #         M = ceil(segment_length / dx)
 #         append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
 #     end
-#     map(full, dpath)
+#     map(dense, dpath)
 # end
 
 ### Reeds-Shepp fix inexact steering (okay not really) and discretize

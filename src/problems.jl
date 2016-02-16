@@ -27,6 +27,8 @@ type MPProblem{T<:AbstractFloat}
         new(SS, init, goal, CC, V, config_name, "not yet solved")
     end
 end
+changeprecision{T<:AbstractFloat}(::Type{T}, P::MPProblem) =
+    MPProblem(map(x -> changeprecision(T,x), (P.SS, P.init, P.goal, P.CC))...)  # TODO: changeprecision for `SampleSet`s
 
 function MPProblem{T}(SS::StateSpace{T}, init::State, goal::Goal, CC::CollisionChecker)
     if isa(init, Vector)

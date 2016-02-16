@@ -9,26 +9,32 @@ immutable RectangleGoal{N,T<:AbstractFloat} <: WorkspaceGoal
     hi::Vec{N,T}
 end
 RectangleGoal(lo::Vector, hi::Vector) = RectangleGoal(Vec(lo), Vec(hi))
+changeprecision{T<:AbstractFloat}(::Type{T}, G::RectangleGoal) = RectangleGoal(changeprecision(T, G.lo),
+                                                                               changeprecision(T, G.hi))
+
 
 immutable BallGoal{N,T<:AbstractFloat} <: WorkspaceGoal
     center::Vec{N,T}
     radius::T
 end
 BallGoal(center::Vector, radius) = BallGoal(Vec(center, radius))
+changeprecision{T<:AbstractFloat}(::Type{T}, G::BallGoal) = BallGoal(changeprecision(T, G.center), T(radius))
 
 immutable PointGoal{N,T<:AbstractFloat} <: WorkspaceGoal
     pt::Vec{N,T}
 end
 PointGoal(pt::Vector) = PointGoal(Vec(pt))
+changeprecision{T<:AbstractFloat}(::Type{T}, G::PointGoal) = PointGoal(changeprecision(T, G.pt))
 
 immutable StateGoal{S<:State} <: StateSpaceGoal
     st::S
 end
+changeprecision{T<:AbstractFloat}(::Type{T}, G::StateGoal) = StateGoal(changeprecision(T, G.st))
 
 plot(G::RectangleGoal, SS::StateSpace) = plot_rectangle(G.lo, G.hi, color = "green")
 plot(G::BallGoal, SS::StateSpace) = plot_circle(G.center, G.radius, color = "green")
-plot(G::PointGoal, SS::StateSpace) = scatter(G.pt[1], G.pt[2], color = "green", zorder=5)
-plot(G::StateGoal, SS::StateSpace) = scatter(state2workspace(G.st, SS)[1:2]..., color = "green", zorder=5)
+plot(G::PointGoal, SS::StateSpace) = plt.scatter(G.pt[1], G.pt[2], color = "green", zorder=5)
+plot(G::StateGoal, SS::StateSpace) = plt.scatter(state2workspace(G.st, SS)[1:2]..., color = "green", zorder=5)
 
 sample_goal(G::WorkspaceGoal, SS::StateSpace) = workspace2state(sample_goal(G), SS)
 sample_goal(G::StateSpaceGoal, SS::StateSpace) = sample_goal(G)

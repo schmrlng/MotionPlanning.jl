@@ -1,9 +1,7 @@
 import Base: atan2, cross
-import FixedSizeArrays: unit
 export norm2, perp, project, projectN, reflect, reflectN, rotate
 export projectNextrema, voronoi_region, overlapping, ininterval, minmaxV, wrap1
 
-unit(v::Vec{2}) = v/norm(v)
 norm2(v::Vec{2}) = dot(v,v)
 perp(v::Vec{2}) = Vec(v[2],-v[1])
 cross(v1::Vec{2}, v2::Vec{2}) = v1[1]*v2[2]-v1[2]*v2[1]
@@ -17,7 +15,7 @@ function rotate(v::Vec{2}, theta)
     Vec(v[1]*c - v[2]*s, v[1]*s + v[2]*c)
 end
 atan2(v::Vec{2}) = atan2(v[2], v[1])
-function projectNextrema{T<:AbstractFloat}(pts::AbstractVector{Vec{2,T}}, n::Vec{2,T})
+function projectNextrema{T}(pts::AbstractVector{Vec{2,T}}, n::Vec{2,T})
     dmin = T(Inf)
     dmax = -T(Inf)
     for p in pts
