@@ -96,6 +96,7 @@ changeprecision{M,N,T<:AbstractFloat}(::Type{T}, A::Mat{M,N}) = convert(Mat{M,N,
 # Inspired by SparseVectors.jl
 import Base: length, size, nnz, countnz
 import Base.SparseArrays: nonzeros, nonzeroinds
+export subcol, nonzeroinds
 
 typealias CVecSub{T} SubArray{T,1,Vector{T},Tuple{UnitRange{Int64}},1}
 

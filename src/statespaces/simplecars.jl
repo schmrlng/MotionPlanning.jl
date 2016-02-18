@@ -2,23 +2,18 @@ export ReedsSheppMetricSpace, DubinsQuasiMetricSpace
 export ReedsSheppExact, DubinsExact, SimpleCarMetric
 
 ### (Quasi)Metric Typedefs/Evaluation
-immutable CarSegment{T<:AbstractFloat}
-    t::Int          # segment type (L = 1, S = 0, R = -1)
-    d::T            # segment length (radians for curved segments)
-end
-typealias CarPath{T} Vector{CarSegment{T}}
 immutable ReedsSheppExact{T<:AbstractFloat} <: Metric
     r::T
-    p::CarPath{T}    # scratch space to avoid extra memory allocation
+    p::Vector{StepControl{T,2}}    # scratch space to avoid extra memory allocation
 
-    ReedsSheppExact(r::T) = new(r, Array(CarSegment{T}, 5))
+    ReedsSheppExact(r::T) = new(r, Array(StepControl{T,2}, 5))
 end
 ReedsSheppExact{T<:AbstractFloat}(r::T) = ReedsSheppExact{T}(r)
 immutable DubinsExact{T<:AbstractFloat} <: QuasiMetric
     r::T
-    p::CarPath{T}    # scratch space to avoid extra memory allocation
+    p::Vector{StepControl{T,2}}    # scratch space to avoid extra memory allocation
 
-    DubinsExact(r::T) = new(r, Array(CarSegment{T}, 3))
+    DubinsExact(r::T) = new(r, Array(StepControl{T,2}, 3))
 end
 DubinsExact{T<:AbstractFloat}(r::T) = DubinsExact{T}(r)
 typealias SimpleCarMetric{T} Union{ReedsSheppExact{T}, DubinsExact{T}}
@@ -53,11 +48,11 @@ function propagate{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2}
     if abs(u.t*s*invr) > 10*eps(T)
         SE2State(v.x[1] + (sin(v.θ + u.t*s*invr) - sin(v.θ))/invr,
                  v.x[2] + (cos(v.θ) - cos(v.θ + u.t*s*invr))/invr,
-                 mod2pi(v.θ + u.t*s*invr))
+                 mod2piF(v.θ + u.t*s*invr))
     else
         SE2State(v.x[1] + u.t*s*cos(v.θ),
                  v.x[2] + u.t*s*sin(v.θ),
-                 mod2pi(v.θ + u.t*s*invr))
+                 mod2piF(v.θ + u.t*s*invr))
     end
 end
 steering_control(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[2]
@@ -72,123 +67,133 @@ function collision_waypoints{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepCo
     else
         unshift!([SE2State(v.x[1] + (sin(v.θ + i*θres) - sin(v.θ))/invr,
                            v.x[2] + (cos(v.θ) - cos(v.θ + i*θres))/invr,
-                           mod2pi(v.θ + i*θres)) for i in 1:m], v)
+                           mod2piF(v.θ + i*θres)) for i in 1:m], v)
     end
 end
 
 ### Simple Car Steering Nuts and Bolts
-carsegment2stepcontrol{T}(x::CarSegment{T}, r::T) = StepControl(abs(x.d)*r, Vec(T(sign(x.d)), x.t/r))
+carsegment2stepcontrol{T}(t::Int, d::T) = StepControl(abs(d), Vec(T(sign(d)), T(t)))
+scaleradius{T}(u::StepControl{T,2}, r::T) = StepControl(u.t*r, Vec(u.u[1], u.u[2]/r))
+function scaleradius!(u::ZeroOrderHoldControl, r)
+    for i in 1:length(u)
+        u[i] = scaleradius(u[i], r)
+    end
+    u
+end
+mod2piF{T}(x::T) = mod(x, 2*T(pi))
 
 ## Dubins Steering Nuts and Bolts
-function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = 2 + d*d - 2*(ca*cb + sa*sb - d*(sa - sb))
     tmp < 0 && return c
     th = atan2(cb - ca, d + sa - sb)
-    t = mod2pi(-a + th)
+    t = mod2piF(-a + th)
     p = sqrt(max(tmp, T(0)))
-    q = mod2pi(b - th)
+    q = mod2piF(b - th)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(0, p)
-    path[3] = CarSegment{T}(1, q)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(0, p)
+    path[3] = carsegment2stepcontrol(1, q)
     cnew
 end
 
-function dubinsRSR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsRSR!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = 2 + d*d - 2*(ca*cb + sa*sb - d*(sb - sa))
     tmp < 0 && return c
     th = atan2(ca - cb, d - sa + sb)
-    t = mod2pi(a - th)
+    t = mod2piF(a - th)
     p = sqrt(max(tmp, T(0)))
-    q = mod2pi(-b + th)
+    q = mod2piF(-b + th)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(-1, t)
-    path[2] = CarSegment{T}(0, p)
-    path[3] = CarSegment{T}(-1, q)
+    path[1] = carsegment2stepcontrol(-1, t)
+    path[2] = carsegment2stepcontrol(0, p)
+    path[3] = carsegment2stepcontrol(-1, q)
     cnew
 end
 
-function dubinsRSL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsRSL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = d * d - 2 + 2 * (ca*cb + sa*sb - d * (sa + sb))
     tmp < 0 && return c
     p = sqrt(max(tmp, T(0)))
     th = atan2(ca + cb, d - sa - sb) - atan2(T(2), p)
-    t = mod2pi(a - th)
-    q = mod2pi(b - th)
+    t = mod2piF(a - th)
+    q = mod2piF(b - th)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(-1, t)
-    path[2] = CarSegment{T}(0, p)
-    path[3] = CarSegment{T}(1, q)
+    path[1] = carsegment2stepcontrol(-1, t)
+    path[2] = carsegment2stepcontrol(0, p)
+    path[3] = carsegment2stepcontrol(1, q)
     cnew
 end
 
-function dubinsLSR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsLSR!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = -2 + d * d + 2 * (ca*cb + sa*sb + d * (sa + sb))
     tmp < 0 && return c
     p = sqrt(max(tmp, T(0)))
     th = atan2(-ca - cb, d + sa + sb) - atan2(-T(2), p)
-    t = mod2pi(-a + th)
-    q = mod2pi(-b + th)
+    t = mod2piF(-a + th)
+    q = mod2piF(-b + th)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(0, p)
-    path[3] = CarSegment{T}(-1, q)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(0, p)
+    path[3] = carsegment2stepcontrol(-1, q)
     cnew
 end
 
-function dubinsRLR!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsRLR!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = (6 - d * d  + 2 * (ca*cb + sa*sb + d * (sa - sb))) / 8
     abs(tmp) >= 1 && return c
     p = 2*T(pi) - acos(tmp)
     th = atan2(ca - cb, d - sa + sb)
-    t = mod2pi(a - th + p/2)
-    q = mod2pi(a - b - t + p)
+    t = mod2piF(a - th + p/2)
+    q = mod2piF(a - b - t + p)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(-1, t)
-    path[2] = CarSegment{T}(1, p)
-    path[3] = CarSegment{T}(-1, q)
+    path[1] = carsegment2stepcontrol(-1, t)
+    path[2] = carsegment2stepcontrol(1, p)
+    path[3] = carsegment2stepcontrol(-1, q)
     cnew
 end
 
-function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::CarPath{T})
+function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
     tmp = (6 - d * d  + 2 * (ca*cb + sa*sb - d * (sa - sb))) / 8
     abs(tmp) >= 1 && return c
     p = 2*T(pi) - acos(tmp)
     th = atan2(-ca + cb, d + sa - sb)
-    t = mod2pi(-a + th + p/2)
-    q = mod2pi(b - a - t + p)
+    t = mod2piF(-a + th + p/2)
+    q = mod2piF(b - a - t + p)
     cnew = t + p + q
     c <= cnew && return c
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, p)
-    path[3] = CarSegment{T}(1, q)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, p)
+    path[3] = carsegment2stepcontrol(1, q)
     cnew
 end
 
-function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(CarSegment{T}, 3))
-    const dubinsTypes = (dubinsLSL!, dubinsRSR!, dubinsRSL!, dubinsLSR!, dubinsRLR!, dubinsLRL!)
+function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(StepControl{T,2}, 3))
     v = (s2.x - s1.x) / r
     d = norm(v)
     th = atan2(v)
-    a = mod2pi(s1.θ - th)
-    b = mod2pi(s2.θ - th)
+    a = mod2piF(s1.θ - th)
+    b = mod2piF(s2.θ - th)
 
     cmin = T(Inf)
-    for dubinsType! in dubinsTypes
-        cmin = dubinsType!(d, a, b, cmin, pmin)
-    end
-    cmin*r, [carsegment2stepcontrol(pmin[i], r) for i in 1:3]
+    cmin = dubinsLSL!(d, a, b, cmin, pmin)
+    cmin = dubinsRSR!(d, a, b, cmin, pmin)
+    cmin = dubinsRSL!(d, a, b, cmin, pmin)
+    cmin = dubinsLSR!(d, a, b, cmin, pmin)
+    cmin = dubinsRLR!(d, a, b, cmin, pmin)
+    cmin = dubinsLRL!(d, a, b, cmin, pmin)
+    cmin*r, scaleradius!(pmin, r)
 end
 
 function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
@@ -209,7 +214,7 @@ end
 # Utilities (pedantic about typing to guard against problems)
 R{T}(x::T, y::T) = sqrt(x*x + y*y), atan2(y, x)
 function M{T}(t::T)
-    m = mod2pi(t)
+    m = mod2piF(t)
     m > pi ? m - 2*T(pi) : m
 end
 function Tau{T}(u::T, v::T, E::T, N::T)
@@ -242,10 +247,10 @@ backwards!(u::ZeroOrderHoldControl) = reverse!(u)
 const POST, POST_T, POST_R, POST_B, POST_R_T, POST_B_T, POST_B_R, POST_B_R_T = 0, 1, 2, 3, 4, 5, 6, 7
 
 # Gotta check 'em all
-function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(CarSegment{T}, 5))
+function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(StepControl{T,2}, 5))
     dx, dy = (s2.x - s1.x) / r
     ct, st = cos(s1.θ), sin(s1.θ)
-    target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, mod2pi(s2.θ - s1.θ))
+    target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, mod2piF(s2.θ - s1.θ))
 
     tTarget = timeflip(target)
     rTarget = reflect(target)
@@ -323,7 +328,7 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(
     b, c, l = LpRmSmLmRp!(rTarget, c, l, p); b && (post = POST_R)
     b, c, l = LpRmSmLmRp!(trTarget, c, l, p); b && (post = POST_R_T)
 
-    u = [carsegment2stepcontrol(p[i], r) for i in 1:l]
+    u = scaleradius!(p[1:l], r)
     if post == POST_T
         timeflip!(u)
     elseif post == POST_R
@@ -343,161 +348,161 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(
 end
 
 ## Where the magic happens
-function LpSpLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpSpLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     r, θ = R(tx - sin(tt), ty - 1 + cos(tt))
     u = r
-    t = mod2pi(θ)
-    v = mod2pi(tt - t)
+    t = mod2piF(θ)
+    v = mod2piF(tt - t)
     cnew = t + u + v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(0, u)
-    path[3] = CarSegment{T}(1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(0, u)
+    path[3] = carsegment2stepcontrol(1, v)
     true, cnew, 3
 end
 
-function LpSpRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpSpRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     r, θ = R(tx + sin(tt), ty - 1 - cos(tt))
     r*r < 4 && return false, c, l
     u = sqrt(r*r - 4)
     r1, θ1 = R(u, T(2))
-    t = mod2pi(θ + θ1)
-    v = mod2pi(t - tt)
+    t = mod2piF(θ + θ1)
+    v = mod2piF(t - tt)
     cnew = t + u + v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(0, u)
-    path[3] = CarSegment{T}(-1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(0, u)
+    path[3] = carsegment2stepcontrol(-1, v)
     true, cnew, 3
 end
 
-function LpRmLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmLp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1
     E*E + N*N > 16 && return false, c, l
     r, θ = R(E, N)
     u = acos(1 - r*r/8)
-    t = mod2pi(θ - u/2 + pi)
-    v = mod2pi(pi - u/2 - θ + tt)
+    t = mod2piF(θ - u/2 + pi)
+    v = mod2piF(pi - u/2 - θ + tt)
     u = -u
     cnew = t - u + v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, u)
-    path[3] = CarSegment{T}(1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, u)
+    path[3] = carsegment2stepcontrol(1, v)
     true, cnew, 3
 end
     
-function LpRmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1
     E*E + N*N > 16 && return false, c, l
     r, θ = R(E, N)
     u = acos(1 - r*r/8)
-    t = mod2pi(θ - u/2 + pi)
-    v = mod2pi(pi - u/2 - θ + tt) - 2*T(pi)
+    t = mod2piF(θ - u/2 + pi)
+    v = mod2piF(pi - u/2 - θ + tt) - 2*T(pi)
     u = -u
     cnew = t - u - v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, u)
-    path[3] = CarSegment{T}(1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, u)
+    path[3] = carsegment2stepcontrol(1, v)
     true, cnew, 3
 end
     
-function LpRpuLmuRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRpuLmuRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1
     p = (2 + sqrt(E*E + N*N)) / 4
     (p < 0 || p > 1) && return false, c, l
     u = acos(p)
-    t = mod2pi(Tau(u, -u, E, N))
-    v = mod2pi(Omega(u, -u, E, N, tt)) - 2*T(pi)
+    t = mod2piF(Tau(u, -u, E, N))
+    v = mod2piF(Omega(u, -u, E, N, tt)) - 2*T(pi)
     cnew = t + 2*u - v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, u)
-    path[3] = CarSegment{T}(1, -u)
-    path[4] = CarSegment{T}(-1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, u)
+    path[3] = carsegment2stepcontrol(1, -u)
+    path[4] = carsegment2stepcontrol(-1, v)
     true, cnew, 4
 end
 
-function LpRmuLmuRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmuLmuRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1
     p = (20 - E*E - N*N) / 16
     (p < 0 || p > 1) && return false, c, l
     u = -acos(p)
-    t = mod2pi(Tau(u, u, E, N))
-    v = mod2pi(Omega(u, u, E, N, tt))
+    t = mod2piF(Tau(u, u, E, N))
+    v = mod2piF(Omega(u, u, E, N, tt))
     cnew = t - 2*u + v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, u)
-    path[3] = CarSegment{T}(1, u)
-    path[4] = CarSegment{T}(-1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, u)
+    path[3] = carsegment2stepcontrol(1, u)
+    path[4] = carsegment2stepcontrol(-1, v)
     true, cnew, 4
 end
 
-function LpRmSmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmSmLm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx - sin(tt)
     N = ty + cos(tt) - 1
     D, β = R(E, N)
     D < 2 && return false, c, l
     γ = acos(2/D)
     F = sqrt(D*D/4 - 1)
-    t = mod2pi(pi + β - γ)
+    t = mod2piF(pi + β - γ)
     u = 2 - 2*F
     u > 0 && return false, c, l
-    v = mod2pi(-3*T(pi)/2 + γ + tt - β) - 2*T(pi)
+    v = mod2piF(-3*T(pi)/2 + γ + tt - β) - 2*T(pi)
     cnew = t + T(pi)/2 - u - v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, -T(pi)/2)
-    path[3] = CarSegment{T}(0, u)
-    path[4] = CarSegment{T}(1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, -T(pi)/2)
+    path[3] = carsegment2stepcontrol(0, u)
+    path[4] = carsegment2stepcontrol(1, v)
     true, cnew, 4
 end
 
-function LpRmSmRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmSmRm!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1
     D, β = R(E, N)
     D < 2 && return false, c, l
-    t = mod2pi(β + T(pi)/2)
+    t = mod2piF(β + T(pi)/2)
     u = 2 - D
     u > 0 && return false, c, l
-    v = mod2pi(-pi - tt + β) - 2*T(pi)
+    v = mod2piF(-pi - tt + β) - 2*T(pi)
     cnew = t + T(pi)/2 - u - v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, -T(pi)/2)
-    path[3] = CarSegment{T}(0, u)
-    path[4] = CarSegment{T}(-1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, -T(pi)/2)
+    path[3] = carsegment2stepcontrol(0, u)
+    path[4] = carsegment2stepcontrol(-1, v)
     true, cnew, 4
 end
     
-function LpRmSmLmRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::CarPath{T})
+function LpRmSmLmRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepControl{T,2}})
     E = tx + sin(tt)
     N = ty - cos(tt) - 1
     D, β = R(E, N)
     D < 2 && return false, c, l
     γ = acos(2/D)
     F = sqrt(D*D/4 - 1)
-    t = mod2pi(pi + β - γ)
+    t = mod2piF(pi + β - γ)
     u = 4 - 2*F
     u > 0 && return false, c, l
-    v = mod2pi(pi + β - tt - γ)
+    v = mod2piF(pi + β - tt - γ)
     cnew = t + pi - u + v
     c <= cnew && return false, c, l
-    path[1] = CarSegment{T}(1, t)
-    path[2] = CarSegment{T}(-1, -T(pi)/2)
-    path[3] = CarSegment{T}(0, u)
-    path[4] = CarSegment{T}(1, -T(pi)/2)
-    path[5] = CarSegment{T}(-1, v)
+    path[1] = carsegment2stepcontrol(1, t)
+    path[2] = carsegment2stepcontrol(-1, -T(pi)/2)
+    path[3] = carsegment2stepcontrol(0, u)
+    path[4] = carsegment2stepcontrol(1, -T(pi)/2)
+    path[5] = carsegment2stepcontrol(-1, v)
     true, cnew, 5
 end
 
 for f in (:LpSpLp!, :LpSpRp!, :LpRmLp!, :LpRmLm!, :LpRpuLmuRm!, :LpRmuLmuRp!, :LpRmSmLm!, :LpRmSmRm!, :LpRmSmLmRp!)
-    @eval $f{T}(s::SE2State{T}, c::T, l::Int, p::CarPath{T}) = $f(s.x[1], s.x[2], s.θ, c, l, p)
+    @eval $f{T}(s::SE2State{T}, c::T, l::Int, p::Vector{StepControl{T,2}}) = $f(s.x[1], s.x[2], s.θ, c, l, p)
 end

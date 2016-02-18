@@ -116,8 +116,9 @@ end
 typealias ChoppedPreMetric{M,B,T} Union{ChoppedMetric{M,B,T}, ChoppedQuasiMetric{M,B,T}}
 function evaluate(clbm::ChoppedPreMetric, v::State, w::State)
     lb = evaluate(clbm.lowerbound, v, w)
-    lb >= clbm.chopval && return clbm.chopval
-    min(evaluate(clbm.m, v, w), clbm.chopval)
+    lb >= clbm.chopval && return oftype(clbm.chopval, Inf)
+    d = evaluate(clbm.m, v, w)
+    d <= clbm.chopval ? d : oftype(clbm.chopval, Inf)
 end
 for M in (:ChoppedMetric, :ChoppedQuasiMetric)
     @eval changeprecision{T<:AbstractFloat}(::Type{T}, x::$M) = $M(changeprecision(T, x.m),
@@ -175,19 +176,3 @@ function splitcontrol{T<:AbstractFloat}(x0::ZeroOrderHoldControl, t::Union{T, Ab
     splitu[end] = x[uidx:end]
     splitu
 end
-
-
-# function splitcontrol(x::ZeroOrderHoldControl, t)
-#     if t < 0
-#         Array(eltype(x), 0), x
-#     else
-#         cumduration = cumsum([s.t for s in x])  # TODO: v0.5 generators
-#         splitidx = findfirst(d -> d > t, cumduration)
-#         if splitidx > 0
-#             u1, u2 = splitcontrol(x[splitidx], t - (cumduration[splitidx] - x[splitidx].t))
-#             push!(x[1:splitidx-1], u1), unshift!(x[splitidx+1:end], u2)
-#         else
-#             x, Array(eltype(x), 0)
-#         end
-#     end
-# end
