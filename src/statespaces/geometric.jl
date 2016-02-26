@@ -19,7 +19,8 @@ inrange(tree::NearestNeighbors.NNTree, v::Vec, args...) = inrange(tree, dense(v)
 ### Steering
 propagate(M::Euclidean, v::Vec, u::StepControl) = v + u.t*u.u
 steering_control(M::Euclidean, v::Vec, w::Vec) = StepControl(evaluate(M, v, w), normalize(w - v))
-collision_waypoints(::Euclidean, v::Vec, w::Vec) = [v, w]
+collision_waypoints(::Euclidean, v::Vec, w::Vec) = (v, w)
+# TODO: specialized methods that don't check ends
 
 # time_waypoint(M::Euclidean, v, w, t) = v + min(t/evaluate(M, v, w), 1)*(w - v)
 # cost_waypoint(M::Euclidean, v, w, c) = time_waypoint(M, v, w, c)

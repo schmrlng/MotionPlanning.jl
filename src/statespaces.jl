@@ -69,6 +69,7 @@ end
 immutable OutputMatrix{M,N,T<:AbstractFloat} <: State2Workspace
     C::Mat{M,N,T}
 end
+OutputMatrix(C::Matrix) = OutputMatrix(Mat(C))
 immutable ExtractVector <: State2Workspace end
 changeprecision{T<:AbstractFloat}(::Type{T}, s2w::OutputMatrix) = OutputMatrix(changeprecision(T, s2w.C))
 
@@ -97,32 +98,55 @@ end
 ### Propagation and Waypoints
 setup_steering(SS::StateSpace, r) = setup_steering(SS.dist, r)
 setup_steering(d::PreMetric, r) = nothing
-setup_steering(d::ChoppedPreMetric, r) = (d.chopval = r + eps(r))
+setup_steering(d::ChoppedPreMetric, r) = (d.chopval = r)
 controltype(d::PreMetric) = NullControl  # TODO: not sure if I even use this anymore, but will be relevant for caching
 
-function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::PiecewiseControl, t::AbstractVector{T})
-    path = typeof(v)[]
-    for ui in splitcontrol(u, t)[1:end-1]
-        v = propagate(d, v, ui)
-        push!(path, v)
-    end
-    path
+# function propagate{T<:AbstractFloat}(d::PreMetric,
+#                                      v::State, u::Union{ZeroOrderHoldControl, StepControl}, t::AbstractVector{T})
+#     path = typeof(v)[]
+#     for ui in splitcontrol(u, t)[1:end-1]
+#         v = propagate(d, v, ui)
+#         push!(path, v)
+#     end
+#     path
+# end
+function propagate{T}(d::PreMetric, v::State, u::StepControl{T}, s::AbstractFloat)
+    s <= 0 ? v : s >= duration(u) ? propagate(d, v, u) : propagate(d, v, StepControl(T(s),u.u))
 end
 
-## ZeroOrderHoldControl
-function propagate(d::PreMetric, v::State, zoh::ZeroOrderHoldControl)
-    for u in zoh
+function propagate(d::PreMetric, v::State, us::ControlSequence)
+    for u in us
         v = propagate(d, v, u)
     end
     v
 end
-function collision_waypoints(d::PreMetric, v::State, zoh::ZeroOrderHoldControl)
+
+function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::ControlInfo, s::AbstractVector{T})
+    [propagate(d, v, u, t) for t in s]
+end
+function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::ControlSequence, s::AbstractVector{T})
+    issorted(s) || error("Times should be sorted as input to propagate.")
+    tf = duration(u)
+    s = clamp(s, zero(tf), tf)
     path = typeof(v)[]
-    for u in zoh
+    t0, i = zero(tf), 1
+    for t in s
+        while t >= t0 + duration(u[i]) && i < length(u)    # second clause necessary because of numerical error
+            v = propagate(d, v, u[i])
+            t0 += duration(u[i])
+            i += 1
+        end
+        push!(path, propagate(d, v, u[i], t-t0))
+    end
+    path
+end
+
+function collision_waypoints(d::PreMetric, v::State, us::ControlSequence)
+    path = typeof(v)[]
+    for u in us
         append!(path, collision_waypoints(d, v, u))
         v = propagate(d, v, u)
     end
-    push!(path, v)
 end
 
 ## Waypoints
@@ -174,6 +198,7 @@ plot(SS::StateSpace) = plot_bounds(SS.lo, SS.hi)
 plot_waypoints(SS::StateSpace, v::State, w::State) =
     map(x -> state2workspace(x, SS.s2w), isa(SS.dist, Euclidean) ? collision_waypoints(SS,v,w) : waypoints(SS,v,w,10))
 function plot_path(p::Path, SS::StateSpace; kwargs...)
+    plt.scatter(zip([state2workspace(x, SS)[1:2] for x in p]...)...; kwargs...)
     wps = hcat([hcat(plot_waypoints(SS, p[i], p[i+1])...) for i in 1:length(p)-1]...)
     plot_path(wps; kwargs...)
 end
@@ -187,5 +212,5 @@ function plot_tree(V::Path, A::Vector{Int}, SS::StateSpace; kwargs...)    # V is
 end
 
 include("statespaces/geometric.jl")
-# include("statespaces/linearquadratic.jl")
+include("statespaces/linearquadratic.jl")
 include("statespaces/simplecars.jl")

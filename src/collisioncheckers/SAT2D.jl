@@ -173,7 +173,7 @@ function colliding_ends_free(L::Line, P::Polygon)
     is_separating_axis(L,P) && return false
     !(@any [is_separating_axis(P,L,i) for i in 1:length(P.normals)])
 end
-colliding_ends_free(B::Basic2D, L::Line) = colliding_ends_free(L,B) 
+colliding_ends_free(B::Basic2D, L::Line) = colliding_ends_free(L,B)
 colliding(L::Line, B::Basic2D) = colliding_ends_free(L,B) || colliding(L.v,B) || colliding(L.w,B)
 colliding(B::Basic2D, L::Line) = colliding(L,B)
 colliding(L::Line, C::Compound2D) = colliding(C,L)

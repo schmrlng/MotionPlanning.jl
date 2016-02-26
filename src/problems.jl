@@ -42,6 +42,9 @@ function copy(P::MPProblem)
     Pcopy.solution = P.solution
     Pcopy
 end
+function clearsamples!(P::MPProblem)
+    P.V = defaultNN(P.SS, P.init)
+end
 
 plot_path(SS::StateSpace, V::SampleSet, sol; kwargs...) = plot_path(V[sol], SS; kwargs...)
 plot_tree(SS::StateSpace, V::SampleSet, A; kwargs...) = plot_tree(V.V, A, SS; kwargs...)

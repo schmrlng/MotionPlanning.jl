@@ -98,7 +98,7 @@ import Base: length, size, nnz, countnz
 import Base.SparseArrays: nonzeros, nonzeroinds
 export subcol, nonzeroinds
 
-typealias CVecSub{T} SubArray{T,1,Vector{T},Tuple{UnitRange{Int64}},1}
+typealias CVecSub{T} SubArray{T,1,Vector{T},Tuple{UnitRange{Int64}},true}
 
 immutable SparseVectorSub{Tv,Ti<:Integer} <: AbstractSparseVector{Tv,Ti}
     n::Int                  # the number of elements

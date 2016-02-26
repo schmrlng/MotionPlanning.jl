@@ -11,7 +11,7 @@ changeprecision{T<:AbstractFloat}(::Type{T}, CC::PointRobot2D) = PointRobot2D(ch
 
 @unfix is_free_state(v::Vec{2}, CC::PointRobot2D) = !colliding(v, CC.obstacles)
 @unfix is_free_motion(v::Vec{2}, w::Vec{2}, CC::PointRobot2D) = (CC.count += 1;
-                                                                 !colliding_ends_free(Line(v,w), CC.obstacles))
+                                                                 !colliding(Line(v,w), CC.obstacles))
 function is_free_path(path::Path, CC::PointRobot2D)
     for i in 1:length(path)-1
         !is_free_motion(path[i], path[i+1], CC) && return false

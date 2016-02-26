@@ -29,6 +29,7 @@ changeprecision{T<:AbstractFloat}(::Type{T}, G::PointGoal) = PointGoal(changepre
 immutable StateGoal{S<:State} <: StateSpaceGoal
     st::S
 end
+StateGoal(s::Vector) = StateGoal(Vec(s))
 changeprecision{T<:AbstractFloat}(::Type{T}, G::StateGoal) = StateGoal(changeprecision(T, G.st))
 
 plot(G::RectangleGoal, SS::StateSpace) = plot_rectangle(G.lo, G.hi, color = "green")

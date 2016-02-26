@@ -114,7 +114,7 @@ getindex(NN::SampleSet, I::AbstractVector) = [NN[i] for i in I]
 
 
 ### Near Neighbor Computation
-
+# TODO: forwards/backwards should be probably moved into the datastructure; perhaps a type parameterization
 @inline inball!(NN::MetricNN, v::Int, r, f::BitVector) = filter_neighborhood(inball!(NN, v, r), f)
 @inline inballF!(NN::QuasiMetricNN, v::Int, r, f::BitVector) = filter_neighborhood(inballF!(NN, v, r), f)
 @inline inballB!(NN::QuasiMetricNN, v::Int, r, f::BitVector) = filter_neighborhood(inballB!(NN, v, r), f)
@@ -133,7 +133,7 @@ for direction in ("", "F", "B")
     end
 end
 
-function inball(V::Vector, dist::Metric, DS::DistanceDataStructure, v::Int, r, forwards::Bool = true)
+function inball(V::Vector, dist::PreMetric, DS::DistanceDataStructure, v::Int, r, forwards::Bool = true)
     ds = forwards ? colwise(dist, V[v], V) : colwise(dist, V, V[v])
     @devec nn_bool = ds .<= r
     nn_bool[v] = false
@@ -141,21 +141,21 @@ function inball(V::Vector, dist::Metric, DS::DistanceDataStructure, v::Int, r, f
     SparseVector(length(V), inds, ds[inds])
 end
 
-function inball{A<:Matrix}(V::Vector, dist::Metric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
-    @devec nn_bool = DS.dmat[:,v] .<= r
+function inball{A<:Matrix}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
+    @devec nn_bool = DS.Dmat[:,v] .<= r
     nn_bool[v] = false
     inds = find(nn_bool)
-    SparseVector(length(V), inds, DS.dmat[inds,v])
+    SparseVector(length(V), inds, DS.Dmat[inds,v])
 end
 
-function inball{A<:SparseMatrixCSC}(V::Vector, dist::Metric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
-    vcol = subcol(DS.dmat, v)
+function inball{A<:SparseMatrixCSC}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
+    vcol = subcol(DS.Dmat, v)
     inds, ds = nonzeroinds(vcol), nonzeros(vcol)
     @devec nn_bool = ds .<= r
     SparseVector(length(V), inds[nn_bool], ds[nn_bool])
 end
 
-function inball{S}(V::Vector{S}, dist::Metric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
+function inball{S}(V::Vector{S}, dist::PreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
     inds = inrange(DS.tree, V[v], r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
     SparseVector(length(V), inds, forwards ? colwise(dist, V[v], DS.tree.data[:,inds]) : colwise(dist, DS.tree.data[:,inds], V[v]))

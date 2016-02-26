@@ -1,10 +1,10 @@
 export fmtstar!
 
 fmtstar!(P::MPProblem; kwargs...) = fmtstar!(P, length(P.V); kwargs...)
-function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = 1.0,
+function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = T(1),
                                         connections::Symbol = :R,
                                         k = min(ceil(Int, (2*rm)^dim(P.SS)*(e/dim(P.SS))*log(N)), N-1),
-                                        r = 0.,
+                                        r = T(0),
                                         ensure_goal_ct = 1,
                                         init_idx = 1,
                                         checkpts = true)  # TODO: bleh, prefer false
@@ -34,9 +34,9 @@ function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = 1.0,
             F[i] = is_free_state(P.V[i], P.CC, P.SS)
         end
     end
-    if r == 0.
+    if r == 0
         d = dim(P.SS)
-        r = rm*2*(1/d*free_volume_ub/(pi^(d/2)/gamma(d/2+1))*log(N)/N)^(1/d)
+        r = T(rm*2*(1/d*free_volume_ub/(pi^(d/2)/gamma(d/2+1))*log(N)/N)^(1/d))
         setup_steering(P.SS, r)
     end
 
@@ -48,7 +48,7 @@ function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = 1.0,
     if P.V[init_idx] == P.init
         W[init_idx] = false
         H[init_idx] = true
-        HHeap = Collections.PriorityQueue([init_idx], T[0.])
+        HHeap = Collections.PriorityQueue([init_idx], T[0])
     else    # special casing the first expansion round of FMT if P.init is not in the sample set
         # HHeap = Collections.PriorityQueue(Int[], T[])
         # neighborhood = (connections == :R ? inballF(P.V, P.init, r) : knnF(P.V, P.init, r))
@@ -94,7 +94,7 @@ function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = 1.0,
     while sol[1] != 1
         unshift!(sol, A[sol[1]])
         if sol[1] == 0
-            unshift!(costs, 0.)
+            unshift!(costs, T(0))
             break
         end
         unshift!(costs, C[sol[1]])

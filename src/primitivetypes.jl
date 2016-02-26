@@ -127,7 +127,8 @@ for M in (:ChoppedMetric, :ChoppedQuasiMetric)
 end
 
 ### Steering
-export ControlInfo, NullControl, StepControl, ZeroOrderHoldControl
+export ControlInfo, NullControl, StepControl, DurationAndTargetControl
+export ControlSequence, ZeroOrderHoldControl, TimestampedTrajectoryControl
 export duration, splitcontrol
 
 abstract ControlInfo
@@ -136,11 +137,17 @@ immutable StepControl{T<:AbstractFloat,N} <: ControlInfo
     t::T
     u::Vec{N,T}
 end
+immutable DurationAndTargetControl{T<:AbstractFloat,N} <: ControlInfo
+    t::T
+    x::Vec{N,T}
+end
+typealias ControlSequence{C<:ControlInfo} Vector{C}
 typealias ZeroOrderHoldControl{C<:StepControl} Vector{C}
-typealias PiecewiseControl Union{ZeroOrderHoldControl, StepControl}
+typealias TimestampedTrajectoryControl{C<:DurationAndTargetControl} Vector{C}
 
 duration(x::StepControl) = x.t
-duration(x::ZeroOrderHoldControl) = sum([s.t for s in x])  # TODO: v0.5 generators
+duration(x::DurationAndTargetControl) = x.t
+duration(x::ControlSequence) = sum(duration(s) for s in x)
 function splitcontrol{T}(x::StepControl{T}, t::Real)
     if t < 0
         StepControl(T(0), x.u), x
