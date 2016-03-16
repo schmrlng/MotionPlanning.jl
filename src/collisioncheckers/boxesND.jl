@@ -42,7 +42,7 @@ plot(CC::PointRobotNDBoxes, lo = zeros(2), hi = ones(2); kwargs...) =
 @unfix is_free_state{N}(v::Vec{N}, BB::BoxBounds{N}) = @any [!(BB.lo[i] <= v[i] <= BB.hi[i]) for i in 1:N]
 @unfix is_free_state{N,T}(v::Vec{N}, BL::Vector{BoxBounds{N,T}}) = @all [is_free_state(v, BL[k]) for k in 1:length(BL)]
 @unfix is_free_motion_broadphase{N}(l::Vec{N}, h::Vec{N}, BB::BoxBounds{N}) =
-    @any [BB.hi[i] < l[i] || BB.hi[i] > h[i] for i in 1:N]
+    @any [BB.hi[i] < l[i] || BB.lo[i] > h[i] for i in 1:N]
 @unfix function is_free_motion{N}(v::Vec{N}, w::Vec{N}, BB::BoxBounds{N})
     v_to_w = w - v
     corner = (v .< BB.lo) .* BB.lo + (1 - (v .< BB.lo)) .* BB.hi  # TODO: ifelse (blend) for FixedSizeArrays
@@ -52,7 +52,7 @@ end
 @unfix function is_free_motion{N,T}(v::Vec{N}, w::Vec{N}, BL::Vector{BoxBounds{N,T}})
     bb_min = min(v,w)
     bb_max = max(v,w)
-    @all [is_free_motion_broadphase(bb_min, bb_max, BL[k]) && is_free_motion(v, w, BL[k]) for k in 1:length(BL)]
+    @all [is_free_motion_broadphase(bb_min, bb_max, BL[k]) || is_free_motion(v, w, BL[k]) for k in 1:length(BL)]
 end
 is_free_path{B<:BoxBounds}(P::Path, BL::Vector{B}) = @all [is_free_motion(P[i], P[i+1], BL) for i in 1:length(BL)-1]
 
