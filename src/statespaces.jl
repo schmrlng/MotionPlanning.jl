@@ -1,6 +1,6 @@
 export RealVectorStateSpace, SE2StateSpace
 export Identity, VectorView, First2Vector2, Select2Vector2, OutputMatrix, ExtractVector
-export sample_space, state2workspace, volume, dim, propagate, collision_waypoints, waypoints
+export sample_space, state2workspace, volume, dim, propagate, collision_waypoints, waypoints, plot_waypoints
 export in_state_space, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering, controltype
 
 #====================== Implementation Notes ======================

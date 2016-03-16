@@ -45,7 +45,7 @@ plot(CC::PointRobotNDBoxes, lo = zeros(2), hi = ones(2); kwargs...) =
     @any [BB.hi[i] < l[i] || BB.hi[i] > h[i] for i in 1:N]
 @unfix function is_free_motion{N}(v::Vec{N}, w::Vec{N}, BB::BoxBounds{N})
     v_to_w = w - v
-    corner = (a .< b) .* b + (1 - (a .< b)) .* c  # TODO: ifelse (blend) for FixedSizeArrays
+    corner = (v .< BB.lo) .* BB.lo + (1 - (v .< BB.lo)) .* BB.hi  # TODO: ifelse (blend) for FixedSizeArrays
     lambdas = (corner - v) ./ v_to_w
     !(@any [(@all [i == j || BB.lo[j] <= v[j] + v_to_w[j]*lambdas[i] <= BB.hi[j] for j in 1:N]) for i in 1:N])
 end

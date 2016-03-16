@@ -1,5 +1,6 @@
 import Base.copy
 export MPProblem, MPSolution
+export clearsamples!
 
 type MPSolution{T}
     status::Symbol
@@ -61,5 +62,8 @@ function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, s
         end
         sol && plot_path(P.SS, P.V, S.metadata["path"], color="blue")
         smoothed && haskey(S.metadata, "smoothed_path") && plot_path(S.metadata["smoothed_path"], color="orange")
+        P.solution.cost
+    else
+        "unsolved"
     end
 end
