@@ -1,6 +1,7 @@
 export RealVectorStateSpace, SE2StateSpace
 export Identity, VectorView, First2Vector2, Select2Vector2, OutputMatrix, ExtractVector
-export sample_space, state2workspace, volume, dim, propagate, collision_waypoints, waypoints, plot_waypoints
+export sample_space, state2workspace, volume, dim
+export steering_control, propagate, collision_waypoints, waypoints, plot_waypoints
 export in_state_space, is_free_state, is_free_motion, is_free_path, defaultNN, setup_steering, controltype
 
 #====================== Implementation Notes ======================
@@ -167,6 +168,7 @@ for f in (:propagate, :collision_waypoints, :waypoints, :steering_control)
     @eval $f(SS::StateSpace, args...) = $f(SS.dist, args...)
     @eval $f(CLBM::ChoppedPreMetric, args...) = $f(CLBM.m, args...)
 end
+steering_control(SS::StateSpace, V::State...) = [steering_control(SS.dist, V[i], V[i+1]) for i in 1:length(V)-1]
 
 ### Validity Checking
 in_state_space{N}(v::Vec{N}, SS::StateSpace) = @all [SS.lo[i] <= v[i] <= SS.hi[i] for i in 1:N]
