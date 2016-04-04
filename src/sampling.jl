@@ -1,15 +1,15 @@
 export sample_free_goal, sample_free!
 
 function sample_free_goal(P::MPProblem)
-    v = vector_to_state(sample_goal(P.goal), P.SS)
-    while ~is_free_state(v, P.CC, P.SS)
-        v = vector_to_state(sample_goal(P.goal), P.SS)
+    v = sample_goal(P.goal, P.SS)
+    while !is_free_state(v, P.CC, P.SS)
+        v = sample_goal(P.goal, P.SS)
     end
     return v
 end
 
-function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_bias = 0.0)
-    N == 0 && return 1.
+function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true; goal_bias = 0.0, ensure_goal_ct = 5)
+    N <= 0 && return volume(P.SS)  # TODO: do something principled about replanning with fewer samples (see note in fmtstar!)
     V = P.V.V
     W = Array(eltype(V), N)
     if length(V) > 0 && V[1] == P.init
@@ -35,7 +35,11 @@ function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true, goal_b
             end
         end
     end
-    ensure_goal && (W[N] = sample_free_goal(P))
+    if ensure_goal
+        for i in 1:min(ensure_goal_ct, N-1)
+            W[N+1-i] = sample_free_goal(P)
+        end
+    end
     P.V = addpoints(P.V, W)
     return volume(P.SS) #ci(BinomialTest(successes, attempts), .05, tail = :left)[2] * volume(P.SS)
 end

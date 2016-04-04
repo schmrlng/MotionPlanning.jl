@@ -1,27 +1,26 @@
-export RealVectorMetricSpace, BoundedEuclideanStateSpace, UnitHypercube
+export BoundedEuclideanStateSpace, UnitHypercube
 
-immutable RealVectorMetricSpace{T<:FloatingPoint} <: RealVectorStateSpace
-    dim::Int
-    lo::Vector{T}
-    hi::Vector{T}
-    dist::Metric
-end
+### Metric Typedefs/Evaluation
+evaluate(M::Euclidean, v::Vec, w::Vec) = norm(w - v)
+colwise{S<:State}(d::Euclidean, v::Vec, W::Vector{S}) = colwise(d, dense(v), statevec2mat(W))
+colwise{S<:State}(d::Euclidean, W::Vector{S}, v::Vec) = colwise(d, dense(v), statevec2mat(W))
+colwise(d::Euclidean, v::Vec, W::Matrix) = colwise(d, dense(v), W)
+colwise(d::Euclidean, W::Matrix, v::Vec) = colwise(d, dense(v), W)
 
-vector_to_state{T}(v::AbstractVector{T}, SS::RealVectorMetricSpace) = SS.dim == 2 ? convert(Vector2{T}, v) : v
-sample_space(SS::RealVectorMetricSpace) = vector_to_state(SS.lo + rand(SS.dim).*(SS.hi-SS.lo), SS)   # TODO: @devec
-function volume(SS::RealVectorMetricSpace)
-    SS.dist == Euclidean() && return prod(SS.hi-SS.lo)
-    error("Volume not yet implemented for non-Euclidean metrics!")
-end
-function defaultNN(SS::RealVectorMetricSpace, init)
-    init_st = vector_to_state(init, SS)
-    V = typeof(init_st)[init_st]
-    SS.dist == Euclidean() && return EuclideanNN_KDTree(V)
-    MetricNN_BruteForce(V, SS.dist)
-end
+### Metric Space Instantiation
+# TODO: implement show method with dynamics and cost function
+BoundedEuclideanStateSpace{d}(lo::Vec{d}, hi::Vec{d}) = RealVectorStateSpace(lo, hi, Euclidean(), Identity())
+UnitHypercube{T<:AbstractFloat}(d::Int, ::Type{T} = Float64) = BoundedEuclideanStateSpace(zero(Vec{d,T}), one(Vec{d,T}))
 
-### Bounded Euclidean State Space
+helper_data_structures{S}(V::Vector{S}, M::Euclidean) = (TreeDistanceDS(KDTree(statevec2mat(V), M; reorder=false)),
+                                                         EmptyControlCache())
+inrange(tree::NearestNeighbors.NNTree, v::Vec, args...) = inrange(tree, dense(v), args...)
 
-BoundedEuclideanStateSpace(d::Int, lo::Vector, hi::Vector) = RealVectorMetricSpace(d, lo, hi, Euclidean())
-UnitHypercube(d::Int) = BoundedEuclideanStateSpace(d, zeros(d), ones(d))
-pairwise_distances{S<:State}(dist::Euclidean, V::Vector{S}) = (pairwise(dist, hcat(V...)), Array(NullControl, 0, 0))
+### Steering
+propagate(M::Euclidean, v::Vec, u::StepControl) = v + u.t*u.u
+steering_control(M::Euclidean, v::Vec, w::Vec) = StepControl(evaluate(M, v, w), normalize(w - v))
+collision_waypoints(::Euclidean, v::Vec, w::Vec) = (v, w)
+# TODO: specialized methods that don't check ends
+
+# time_waypoint(M::Euclidean, v, w, t) = v + min(t/evaluate(M, v, w), 1)*(w - v)
+# cost_waypoint(M::Euclidean, v, w, c) = time_waypoint(M, v, w, c)

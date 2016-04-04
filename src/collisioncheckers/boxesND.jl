@@ -2,99 +2,77 @@ export PointRobotNDBoxes
 
 # ---------- Point Robot (amongst N-d boxes) ----------
 
-typealias Matrix3D{T} Array{T,3}
-type PointRobotNDBoxes <: SweptCollisionChecker
-    boxes::Matrix3D
+immutable BoxBounds{N,T<:AbstractFloat}
+    lo::Vec{N,T}
+    hi::Vec{N,T}
+end
+BoxBounds(lo::AbstractVector, hi::AbstractVector) = BoxBounds(Vec(lo), Vec(hi))
+BoxBounds(lohi::Matrix) = BoxBounds(Vec(lohi[:,1]), Vec(lohi[:,2]))
+BoxBounds(BB::BoxBounds) = BB
+inflate{N,T}(BB::BoxBounds{N,T}, eps) = eps > 0 ? BoxBounds(BB.lo - T(eps), BB.hi + T(eps)) : BB
+changeprecision{T<:AbstractFloat}(::Type{T}, BB::BoxBounds) =
+    BoxBounds(changeprecision(T, BB.lo), changeprecision(T, BB.hi))
+
+type PointRobotNDBoxes{N,T} <: SweptCollisionChecker
+    boxes::Vector{BoxBounds{N,T}}
     count::Int
 end
-PointRobotNDBoxes(boxes::Matrix3D) = PointRobotNDBoxes(boxes, 0)
-PointRobotNDBoxes(box_hcat::Matrix) = PointRobotNDBoxes(reshape(box_hcat, size(box_hcat, 1), 2, div(size(box_hcat, 2), 2)))
-PointRobotNDBoxes{T}(box_list::Vector{Matrix{T}}) = PointRobotNDBoxes(hcat(box_list...))
+PointRobotNDBoxes{N,T}(boxes::Vector{BoxBounds{N,T}}) = PointRobotNDBoxes(boxes, 0)
+PointRobotNDBoxes{T}(box_list::Vector{Matrix{T}}) = PointRobotNDBoxes(map(BoxBounds, box_list))
+PointRobotNDBoxes{T}(boxes::Array{T,3}) = PointRobotNDBoxes(vec(mapslices(BoxBounds, boxes, [1,2])))
+PointRobotNDBoxes(boxhcat::Matrix) = PointRobotNDBoxes(reshape(boxhcat, size(boxhcat, 1), 2, div(size(boxhcat, 2), 2)))
+changeprecision{T<:AbstractFloat}(::Type{T}, CC::PointRobotNDBoxes) = PointRobotNDBoxes(changeprecision(T, CC.boxes))
 
-is_free_state(v::AbstractVector, CC::PointRobotNDBoxes) = is_free_state(v, CC.boxes)
-is_free_motion(v::AbstractVector, w::AbstractVector, CC::PointRobotNDBoxes) = is_free_motion(v, w, CC.boxes)
-is_free_path(path::Path, CC::PointRobotNDBoxes) = is_free_path(path, CC.boxes)
+@unfix is_free_state(v::Vec, CC::PointRobotNDBoxes) = is_free_state(v, CC.boxes)
+@unfix is_free_motion(v::Vec, w::Vec, CC::PointRobotNDBoxes) = (CC.count += 1; is_free_motion(v, w, CC.boxes))
+is_free_path(P::Path, CC::PointRobotNDBoxes) = is_free_path(P, CC.boxes)
 
-inflate(CC::PointRobotNDBoxes, eps) = eps > 0 ? PointRobotNDBoxes(CC.boxes .+ [-eps eps]) : CC  # TODO: rounded corners/edges
-addobstacle(CC::PointRobotNDBoxes, o::AbstractMatrix) = PointRobotNDBoxes(cat(3, CC.boxes, o))
-addblocker(CC::PointRobotNDBoxes, v::AbstractVector, r) = addobstacle(CC, [v-r v+r])
-closest(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix) = closest(p, CC.boxes, W)
-close(p::AbstractVector, CC::PointRobotNDBoxes, W::AbstractMatrix, r2) = close(p, CC.boxes, W, r2)
+inflate{N,T}(CC::PointRobotNDBoxes{N,T}, eps) = eps > 0 ? PointRobotNDBoxes([inflate(B, T(eps)) for B in CC.boxes]) : CC
+addobstacle(CC::PointRobotNDBoxes, o) = PointRobotNDBoxes(vcat(CC.boxes, BoxBounds(o)))
+@unfix addblocker(CC::PointRobotNDBoxes, v::Vec, r) = addobstacle(CC, BoxBounds(v-r, v+r))
+@unfix closest(p::Vec, CC::PointRobotNDBoxes, W::Mat) = closest(p, CC.boxes, W)
+@unfix closeR(p::Vec, CC::PointRobotNDBoxes, W::Mat, r2) = closeR(p, CC.boxes, W, r2)
 
 plot(CC::PointRobotNDBoxes, lo = zeros(2), hi = ones(2); kwargs...) =
-    mapslices(o -> plot_rectangle(o, color = "red", edgecolor = "none"; kwargs...), CC.boxes, [1,2])
+    map(o -> plot_rectangle(o.lo, o.hi, color = "red", edgecolor = "none",
+                            xmin = lo[1], xmax = hi[1], ymin = lo[2], ymax = hi[2]; kwargs...), CC.boxes)
 
 ### Point/box obstacle checking in R^n (side note: SAT-style might be faster)
-# TODO: devectorized @all/@any or something of the sort
 
-function is_free_state(v::AbstractVector, o::AbstractMatrix)
-    for i = 1:size(o,1)
-        !(o[i,1] <= v[i] <= o[i,2]) && return true
-    end
-    return false
-end
-
-function is_free_state(v::AbstractVector, obs::Matrix3D)
-    for k = 1:size(obs,3)
-        !is_free_state(v, view(obs,:,:,k)) && return false
-    end
-    return true
-end
-
-function is_free_motion_broadphase(bb_min::AbstractVector, bb_max::AbstractVector, obs::Matrix3D, k::Int)
-    for i = 1:size(obs,1)
-        (obs[i,2,k] < bb_min[i] || obs[i,1,k] > bb_max[i]) && return true
-    end
-    return false
-end
-
-function face_contains_projection(v::AbstractVector, v_to_w::AbstractVector, lambda::Number, j::Int, o::AbstractMatrix)
-    for i = 1:size(o,1)
-        (i != j && !(o[i,1] <= v[i] + v_to_w[i]*lambda <= o[i,2])) && return false
-    end
-    return true
-end
-
-function is_free_motion(v::AbstractVector, w::AbstractVector, o::AbstractMatrix)
+@unfix is_free_state{N}(v::Vec{N}, BB::BoxBounds{N}) = @any [!(BB.lo[i] <= v[i] <= BB.hi[i]) for i in 1:N]
+@unfix is_free_state{N,T}(v::Vec{N}, BL::Vector{BoxBounds{N,T}}) = @all [is_free_state(v, BL[k]) for k in 1:length(BL)]
+@unfix is_free_motion_broadphase{N}(l::Vec{N}, h::Vec{N}, BB::BoxBounds{N}) =
+    @any [BB.hi[i] < l[i] || BB.lo[i] > h[i] for i in 1:N]
+@unfix function is_free_motion{N}(v::Vec{N}, w::Vec{N}, BB::BoxBounds{N})
     v_to_w = w - v
-    @devec lambdas = (blend(v .< o[:,1], o[:,1], o[:,2]) .- v) ./ v_to_w
-    for i in 1:size(o,1)
-        face_contains_projection(v, v_to_w, lambdas[i], i, o) && return false
-    end
-    return true
+    corner = (v .< BB.lo) .* BB.lo + (1 - (v .< BB.lo)) .* BB.hi  # TODO: ifelse (blend) for FixedSizeArrays
+    lambdas = (corner - v) ./ v_to_w
+    !(@any [(@all [i == j || BB.lo[j] <= v[j] + v_to_w[j]*lambdas[i] <= BB.hi[j] for j in 1:N]) for i in 1:N])
 end
-
-function is_free_motion(v::AbstractVector, w::AbstractVector, obs::Matrix3D)
+@unfix function is_free_motion{N,T}(v::Vec{N}, w::Vec{N}, BL::Vector{BoxBounds{N,T}})
     bb_min = min(v,w)
     bb_max = max(v,w)
-    for k = 1:size(obs,3)
-        !is_free_motion_broadphase(bb_min, bb_max, obs, k) && !is_free_motion(v, w, view(obs,:,:,k)) && return false
-    end
-    return true
+    @all [is_free_motion_broadphase(bb_min, bb_max, BL[k]) || is_free_motion(v, w, BL[k]) for k in 1:length(BL)]
 end
+is_free_path{B<:BoxBounds}(P::Path, BL::Vector{B}) = @all [is_free_motion(P[i], P[i+1], BL) for i in 1:length(BL)-1]
 
-function is_free_path(path::Path, obs::Matrix3D)
-    for i in 1:length(path)-1
-        !is_free_motion(path[i], path[i+1], obs) && return false
-    end
-    return true
-end
+### Closest Point
 
-function closest(p::AbstractVector, o::AbstractMatrix, W::AbstractMatrix)
+@unfix function closest{N}(p::Vec{N}, BB::BoxBounds{N}, W::Mat{N,N})
     # v = Variable(length(p))
     # problem = minimize(quad_form(v-p, W), view(o,:,1) <= v, v <= view(o,:,2))
     # solve!(problem, ECOS.ECOSSolver(verbose=false))
     # return (problem.optval, vec(v.value))
-    L = chol(W)
-    vmin = bvls(L, L*p, view(o,:,1), view(o,:,2))
+    L = chol(dense(W))
+    vmin = Vec(bvls(L, L*dense(p), dense(BB.lo), dense(BB.hi)))
     d2min = dot(vmin - p, W*(vmin - p))
     d2min, vmin
 end
 
-function closest(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix)
-    d2min, vmin = Inf, p
-    for k = 1:size(obs,3)
-        (d2, v) = closest(p, view(obs,:,:,k), W)
+@unfix function closest{N,T}(p::Vec{N}, BL::Vector{BoxBounds{N,T}}, W::Mat{N,N})
+    d2min, vmin = T(Inf), p
+    for k = 1:length(BL)
+        (d2, v) = closest(p, BL[k], W)
         if d2 < d2min
             d2min, vmin = d2, v
         end
@@ -102,7 +80,7 @@ function closest(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix)
     d2min, vmin
 end
 
-function close(p::AbstractVector, obs::Matrix3D, W::AbstractMatrix, r2)
-    cps = [closest(p, view(obs,:,:,k), W) for k in 1:size(obs,3)]
+@unfix function closeR{N,T}(p::Vec{N}, BL::Vector{BoxBounds{N,T}}, W::Mat{N,N}, r2)
+    cps = [closest(p, BL[k], W) for k in 1:length(BL)]
     sort!(cps[[c[1] for c in cps] .< r2], by=first)
 end
