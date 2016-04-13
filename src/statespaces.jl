@@ -148,6 +148,7 @@ function collision_waypoints(d::PreMetric, v::State, us::ControlSequence)
         append!(path, collision_waypoints(d, v, u))
         v = propagate(d, v, u)
     end
+    path
 end
 
 ## Waypoints
