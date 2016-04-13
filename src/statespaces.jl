@@ -94,7 +94,7 @@ end
 @unfix workspace2state(w::Vec, v::Vec, s2w::First2Vector2) = setindex(setindex(v, w[1], 1), w[2], 2)
 @unfix workspace2state(w::Vec, v::Vec, s2w::Select2Vector2) = setindex(setindex(v, w[1], s2w.a), w[2], s2w.b)
 @unfix workspace2state(w::Vec, v::Vec, s2w::OutputMatrix) = v + Vec(dense(s2w.C)\dense(w - s2w.C*v))
-@unfix workspace2state(w::Vec{2}, v::SE2State, s2w::ExtractVector) = SE2State(w, v.t)
+@unfix workspace2state(w::Vec{2}, v::SE2State, s2w::ExtractVector) = SE2State(w, v.θ)
 
 ### Propagation and Waypoints
 setup_steering(SS::StateSpace, r) = setup_steering(SS.dist, r)
