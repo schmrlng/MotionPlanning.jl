@@ -169,7 +169,7 @@ for f in (:propagate, :collision_waypoints, :waypoints, :steering_control)
     @eval $f(SS::StateSpace, args...) = $f(SS.dist, args...)
     @eval $f(CLBM::ChoppedPreMetric, args...) = $f(CLBM.m, args...)
 end
-steering_control(SS::StateSpace, V::State...) = [steering_control(SS.dist, V[i], V[i+1]) for i in 1:length(V)-1]
+steering_control(SS::StateSpace, V::State...) = vcat([steering_control(SS.dist,V[i],V[i+1]) for i in 1:length(V)-1]...)
 
 ### Validity Checking
 in_state_space{N}(v::Vec{N}, SS::StateSpace) = @all [SS.lo[i] <= v[i] <= SS.hi[i] for i in 1:N]
