@@ -17,7 +17,7 @@ immutable BallGoal{N,T<:AbstractFloat} <: WorkspaceGoal
     center::Vec{N,T}
     radius::T
 end
-BallGoal(center::Vector, radius) = BallGoal(Vec(center, radius))
+BallGoal(center::Vector, radius) = BallGoal(Vec(center), radius)
 changeprecision{T<:AbstractFloat}(::Type{T}, G::BallGoal) = BallGoal(changeprecision(T, G.center), T(radius))
 
 immutable PointGoal{N,T<:AbstractFloat} <: WorkspaceGoal
@@ -49,7 +49,7 @@ is_goal_pt(v::State, G::BallGoal, SS::StateSpace) = (norm(state2workspace(v, SS)
 function sample_goal(G::BallGoal)
     while true
         v = G.center + 2*G.radius*(rand(typeof(G.center)) - .5)
-        if is_goal_pt(v, G)
+        if norm(v - G.center) <= G.radius
             return v
         end
     end

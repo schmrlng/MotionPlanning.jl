@@ -109,7 +109,7 @@ end
 #     P.solution.metadata["smoothed_path"] = dpath
 # end
 
-function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
+function time_discretize_solution!(P::MPProblem, dt)
     if haskey(P.solution.metadata, "smoothed_path")
         path = P.solution.metadata["smoothed_path"]
         costs = P.solution.metadata["smoothed_cumcost"]
@@ -117,31 +117,55 @@ function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discret
         path = P.V[P.solution.metadata["path"]]
         costs = P.solution.metadata["cumcost"]
     end
-    x0 = path[1]
-    dpath = typeof(x0)[x0]
-    c = dc
-    for i in 1:length(path)-1
-        while c < costs[i+1]
-            push!(dpath, cost_waypoint(P.SS, path[i], path[i+1], c - costs[i]))
-            c = c + dc
-        end
-    end
-    push!(dpath, path[end])
-    P.solution.metadata["discretized_path"] = dpath
+    controlseq = steering_control(P.SS, path...)
+    P.solution.metadata["discretized_path"] = propagate(P.SS, path[1], controlseq, 0:dt:duration(controlseq))
 end
 
-function cost_space_solution!(P::MPProblem, n)
-    for k in n-1:n+10
-        cost_discretize_solution!(P, P.solution.cost / k)
-        if length(P.solution.metadata["discretized_path"]) >= n
-            P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]
-            return P.solution.metadata["discretized_path"]
-        end
+function time_space_solution!(P::MPProblem, n)
+    if haskey(P.solution.metadata, "smoothed_path")
+        path = P.solution.metadata["smoothed_path"]
+        costs = P.solution.metadata["smoothed_cumcost"]
+    else
+        path = P.V[P.solution.metadata["path"]]
+        costs = P.solution.metadata["cumcost"]
     end
-    error("Something must be seriously wrong with costs to get here...")
+    controlseq = steering_control(P.SS, path...)
+    P.solution.metadata["discretized_path"] = propagate(P.SS, path[1], controlseq, linspace(0., duration(controlseq), n))
 end
 
-time_discretize_solution!(P::MPProblem, dt) = cost_discretize_solution!(P::MPProblem, dt) # TODO: TEMP
+# function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
+#     if haskey(P.solution.metadata, "smoothed_path")
+#         path = P.solution.metadata["smoothed_path"]
+#         costs = P.solution.metadata["smoothed_cumcost"]
+#     else
+#         path = P.V[P.solution.metadata["path"]]
+#         costs = P.solution.metadata["cumcost"]
+#     end
+#     x0 = path[1]
+#     dpath = typeof(x0)[x0]
+#     c = dc
+#     for i in 1:length(path)-1
+#         while c < costs[i+1]
+#             push!(dpath, cost_waypoint(P.SS, path[i], path[i+1], c - costs[i]))
+#             c = c + dc
+#         end
+#     end
+#     push!(dpath, path[end])
+#     P.solution.metadata["discretized_path"] = dpath
+# end
+
+# function cost_space_solution!(P::MPProblem, n)
+#     for k in n-1:n+10
+#         cost_discretize_solution!(P, P.solution.cost / k)
+#         if length(P.solution.metadata["discretized_path"]) >= n
+#             P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]
+#             return P.solution.metadata["discretized_path"]
+#         end
+#     end
+#     error("Something must be seriously wrong with costs to get here...")
+# end
+
+# time_discretize_solution!(P::MPProblem, dt) = cost_discretize_solution!(P::MPProblem, dt) # TODO: TEMP
 
 ### Linear Quadratic Discretization
 
