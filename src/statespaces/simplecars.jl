@@ -55,8 +55,8 @@ function propagate{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2}
                  mod2piF(v.θ + u.t*s*invr))
     end
 end
-steering_control(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[2]
-steering_control(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[2]
+steering_control(RS::ReedsSheppExact, v::SE2State, w::SE2State) = copy(reedsshepp(v, w, RS.r, RS.p)[2])
+steering_control(D::DubinsExact, v::SE2State, w::SE2State) = copy(dubins(v, w, D.r, D.p)[2])
 function collision_waypoints{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2})
     s = u.u[1]
     invr = u.u[2]
