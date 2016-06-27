@@ -4,7 +4,7 @@ import NearestNeighbors: inrange
 
 ### State Typedefs
 export AbstractState, State, Path, AbstractBitsState, BitsState
-export statevec2mat, statemat2vec, changeprecision
+export statevec2mat, statemat2vec, changeprecision, dense
 
 "The `supertype` for all non-vector states."
 abstract AbstractState
@@ -29,6 +29,7 @@ dense{S<:State}(x::S) = convert(Vector{eltype(S)}, x)
 changeprecision{T<:AbstractFloat,S<:State}(::Type{T}, x::S) = convert(changeprecision(T,S), x)
 changeprecision{T<:AbstractFloat}(::Type{T}, x::Vector) = [changeprecision(T,i) for i in x]
 changeprecision{T<:AbstractFloat}(::Type{T}, x::AbstractFloat) = T(x)
+changeprecision{T<:AbstractFloat}(::Type{T}, x) = x
 
 ## SE2State
 export SE2State
@@ -63,6 +64,7 @@ changeprecision{T<:AbstractFloat,S}(::Type{T}, ::Type{SE2State{S}}) = SE2State{T
 export Vec
 
 function hcat{N,T}(X::Vec{N,T}...)
+    warn("Should this hcat of `Vec`s be a statevec2mat?")
     result = Array(T, N, length(X))
     @inbounds for i in 1:length(X), j in 1:N
         result[j,i] = X[i][j]
@@ -83,7 +85,7 @@ abstract StateSpace{T<:AbstractFloat}
 abstract State2Workspace
 
 ### Metrics and QuasiMetrics
-export QuasiMetric, ChoppedMetric, ChoppedQuasiMetric, ChoppedPreMetric
+export QuasiMetric, PreMetric, Metric, ChoppedMetric, ChoppedQuasiMetric, ChoppedPreMetric
 
 "A quasimetric satisfies positivity, positive definiteness, and the triangle inequality (no symmetry)."
 abstract QuasiMetric <: PreMetric
@@ -91,14 +93,13 @@ abstract QuasiMetric <: PreMetric
 ## Fallbacks (should usually be extended)
 colwise{S<:State}(d::PreMetric, v::S, W::Vector{S}) = eltype(S)[evaluate(d, v, w) for w in W]
 colwise{S<:State}(d::PreMetric, W::Vector{S}, v::S) = eltype(S)[evaluate(d, w, v) for w in W]
-changeprecision{T<:AbstractFloat}(::Type{T}, x::PreMetric) = x
 
 ## Chopped, Lower-Bounded Metrics
 """
 Evaluates as `min(m(v, w), chopval)` for points `v` and `w`.\n
 `lowerbound` should be easier to evaluate than `m` and must satisfy `lowerbound(v, w) ≤ m(v, w)` for all `v`, `w`.
 """
-type ChoppedMetric{M<:Metric,B<:Metric,T<:AbstractFloat} <: Metric
+type ChoppedMetric{M<:Metric,B<:Metric,T<:AbstractFloat} <: PreMetric
     m::M
     lowerbound::B
     chopval::T
@@ -107,7 +108,7 @@ end
 Evaluates as `min(m(v, w), chopval)` for points `v` and `w`.\n
 `lowerbound` should be easier to evaluate than `m` and must satisfy `lowerbound(v, w) ≤ m(v, w)` for all `v`, `w`.
 """
-type ChoppedQuasiMetric{M<:QuasiMetric,B<:Metric,T<:AbstractFloat} <: QuasiMetric
+type ChoppedQuasiMetric{M<:QuasiMetric,B<:Metric,T<:AbstractFloat} <: PreMetric
     m::M
     lowerbound::B
     chopval::T
@@ -116,8 +117,8 @@ end
 typealias ChoppedPreMetric{M,B,T} Union{ChoppedMetric{M,B,T}, ChoppedQuasiMetric{M,B,T}}
 function evaluate(clbm::ChoppedPreMetric, v::State, w::State)
     lb = evaluate(clbm.lowerbound, v, w)
-    lb >= clbm.chopval && return oftype(clbm.chopval, Inf)
-    d = evaluate(clbm.m, v, w)
+    lb >= clbm.chopval && return oftype(clbm.chopval, Inf)  # Inf is a sentinel value more numerically robust than using
+    d = evaluate(clbm.m, v, w)                              # chopval; technically doesn't satisfy metric inequality
     d <= clbm.chopval ? d : oftype(clbm.chopval, Inf)
 end
 for M in (:ChoppedMetric, :ChoppedQuasiMetric)

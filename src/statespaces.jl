@@ -102,30 +102,20 @@ setup_steering(d::PreMetric, r) = nothing
 setup_steering(d::ChoppedPreMetric, r) = (d.chopval = r)
 controltype(d::PreMetric) = NullControl  # TODO: not sure if I even use this anymore, but will be relevant for caching
 
-# function propagate{T<:AbstractFloat}(d::PreMetric,
-#                                      v::State, u::Union{ZeroOrderHoldControl, StepControl}, t::AbstractVector{T})
-#     path = typeof(v)[]
-#     for ui in splitcontrol(u, t)[1:end-1]
-#         v = propagate(d, v, ui)
-#         push!(path, v)
-#     end
-#     path
-# end
-function propagate{T}(d::PreMetric, v::State, u::StepControl{T}, s::AbstractFloat)
+## Generic propagation methods
+function propagate{T}(d::Union{Metric, QuasiMetric}, v::State, u::StepControl{T}, s::AbstractFloat)
     s <= 0 ? v : s >= duration(u) ? propagate(d, v, u) : propagate(d, v, StepControl(T(s),u.u))
 end
-
-function propagate(d::PreMetric, v::State, us::ControlSequence)
+function propagate(d::Union{Metric, QuasiMetric}, v::State, us::ControlSequence)
     for u in us
         v = propagate(d, v, u)
     end
     v
 end
-
-function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::ControlInfo, s::AbstractVector{T})
+function propagate{T<:AbstractFloat}(d::Union{Metric, QuasiMetric}, v::State, u::ControlInfo, s::AbstractVector{T})
     [propagate(d, v, u, t) for t in s]
 end
-function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::ControlSequence, s::AbstractVector{T})
+function propagate{T<:AbstractFloat}(d::Union{Metric, QuasiMetric}, v::State, u::ControlSequence, s::AbstractVector{T})
     issorted(s) || error("Times should be sorted as input to propagate.")
     tf = duration(u)
     s = clamp(s, zero(tf), tf)
@@ -142,7 +132,18 @@ function propagate{T<:AbstractFloat}(d::PreMetric, v::State, u::ControlSequence,
     path
 end
 
-function collision_waypoints(d::PreMetric, v::State, us::ControlSequence)
+## Generic waypoints methods
+function waypoints(d::Union{Metric, QuasiMetric}, v::State, w::State, n::Int)
+    u = steering_control(d, v, w)
+    t = duration(u)
+    propagate(d, v, u, linspace(typeof(t)(0), t, n))
+end
+function waypoints(d::Union{Metric, QuasiMetric}, v::State, w::State, dt::AbstractFloat)
+    u = steering_control(d, v, w)
+    t = duration(u)
+    propagate(d, v, u, [typeof(t)(0):dt:t; t])
+end
+function collision_waypoints(d::Union{Metric, QuasiMetric}, v::State, us::ControlSequence)
     path = typeof(v)[]
     for u in us
         append!(path, collision_waypoints(d, v, u))
@@ -150,19 +151,7 @@ function collision_waypoints(d::PreMetric, v::State, us::ControlSequence)
     end
     path
 end
-
-## Waypoints
-function waypoints(d::PreMetric, v::State, w::State, n::Int)
-    u = steering_control(d, v, w)
-    t = duration(u)
-    propagate(d, v, u, linspace(typeof(t)(0), t, n))
-end
-function waypoints(d::PreMetric, v::State, w::State, dt::AbstractFloat)
-    u = steering_control(d, v, w)
-    t = duration(u)
-    propagate(d, v, u, [typeof(t)(0):dt:t; t])
-end
-collision_waypoints(d::PreMetric, v::State, w::State) = push!(collision_waypoints(d, v, steering_control(d,v,w)), w)
+collision_waypoints(d::Union{Metric, QuasiMetric}, v::State, w::State) = push!(collision_waypoints(d, v, steering_control(d,v,w)), w)
 
 ## StateSpace and CLBM
 for f in (:propagate, :collision_waypoints, :waypoints, :steering_control)

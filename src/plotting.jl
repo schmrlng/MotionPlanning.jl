@@ -30,7 +30,7 @@ function plot_ellipse(c, a, b, t; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = I
 end
 
 function plot_ellipse(c, Sigma; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
-    XY = [cos(linspace(0, 2pi, 40)) sin(linspace(0, 2pi, 40))]*chol(dense(Sigma))
+    XY = [cos(linspace(0, 2pi, 40)) sin(linspace(0, 2pi, 40))]*chol(full(Sigma))
     plt.fill(clamp(c[1] + XY[:,1], xmin, xmax),
                clamp(c[2] + XY[:,2], ymin, ymax),
                edgecolor="black", zorder=0; kwargs...)
