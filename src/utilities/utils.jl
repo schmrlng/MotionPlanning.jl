@@ -118,7 +118,7 @@ function subcol(x::SparseMatrixCSC, j::Integer)
     r1 = convert(Int, x.colptr[j])
     r2 = convert(Int, x.colptr[j+1]) - 1
     rgn = r1:r2
-    SparseVectorSub(x.m, sub(x.rowval, rgn), sub(x.nzval, rgn))
+    SparseVectorSub(x.m, view(x.rowval, rgn), view(x.nzval, rgn))
 end
 length(x::SparseVectorSub) = x.n
 size(x::SparseVectorSub) = (x.n,)

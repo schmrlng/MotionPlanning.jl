@@ -47,6 +47,19 @@ function DoubleIntegrator(d::Int, lo = zeros(d), hi = ones(d); vmax = 1.5, r = 1
     C = [eye(d) zeros(d,d)]
     LinearQuadraticQuasiMetricSpace(Vec([lo; -vmax*ones(d)]), Vec([hi; vmax*ones(d)]), A, B, c, R, C)
 end
+function WebbJvdB13quad10d()
+    g = 9.8
+    m = .5
+    # l = 
+    A32 = [0 g; -g 0; 0 0]
+    A = [zeros(3,3) eye(3)      zeros(3,2)  zeros(3,2);
+         zeros(3,3) zeros(3,3)  A32         zeros(3,2);
+         zeros(2,3) zeros(2,3)  zeros(2,2)  eye(2);
+         zeros(2,10)]
+    B = [zeros(5, 3);
+         ]
+    c = zeros(10)
+end
 
 function helper_data_structures{S<:Vec}(V::Vector{S}, M::LinearQuadratic, batchsize = 1001)
     N = length(V)

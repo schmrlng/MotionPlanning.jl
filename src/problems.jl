@@ -15,7 +15,7 @@ type MPProblem{T<:AbstractFloat}
     goal::Goal
     CC::CollisionChecker
     V::SampleSet
-    config_name::ASCIIString
+    config_name::String
     status::Symbol
     solution::MPSolution{T}
 
@@ -24,7 +24,7 @@ type MPProblem{T<:AbstractFloat}
                        goal::Goal,
                        CC::CollisionChecker,
                        V::SampleSet,
-                       config_name::ASCIIString="$(dim(SS))D $(typeof(SS))")
+                       config_name::String="$(dim(SS))D $(typeof(SS))")
         new(SS, init, goal, CC, V, config_name, "not yet solved")
     end
 end
