@@ -251,7 +251,7 @@ end
     d2min, vmin
 end
 @unfix function closest(p::Vec{2}, P::Polygon, W::Mat{2,2})
-    L = Mat(dense(chol(dense(W))))
+    L = Mat(full(chol(dense(W))))
     xmin = inv(L)*closest_polypts(L*p, eltype(P.points)[L*pt for pt in P.points])[2]
     dot(xmin-p, W*(xmin-p)), xmin
 end

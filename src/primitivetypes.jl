@@ -64,7 +64,7 @@ changeprecision{T<:AbstractFloat,S}(::Type{T}, ::Type{SE2State{S}}) = SE2State{T
 export Vec
 
 function hcat{N,T}(X::Vec{N,T}...)
-    warn("Should this hcat of `Vec`s be a statevec2mat?")
+    # warn("Should this hcat of `Vec`s be a statevec2mat?")
     result = Array(T, N, length(X))
     @inbounds for i in 1:length(X), j in 1:N
         result[j,i] = X[i][j]

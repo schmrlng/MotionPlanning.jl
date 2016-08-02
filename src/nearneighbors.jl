@@ -120,9 +120,9 @@ getindex(NN::SampleSet, I::AbstractVector) = [NN[i] for i in I]
 @inline inballB!(NN::QuasiMetricNN, v::Int, r, f::BitVector) = filter_neighborhood(inballB!(NN, v, r), f)
 for direction in ("", "F", "B")
     NNsym = (direction == "" ? :MetricNN : :QuasiMetricNN)
-    inballD! = symbol(:inball, direction, "!")
-    cacheD = symbol(:cache, direction)
-    DSD = symbol(:DS, direction)
+    inballD! = Symbol(:inball, direction, "!")
+    cacheD = Symbol(:cache, direction)
+    DSD = Symbol(:DS, direction)
     @eval $inballD!{M,S,N<:ImmutableNNC}(NN::$NNsym{M,S,N}, v::Int, r) = subcol(NN.$cacheD.D, v)
     @eval function $inballD!{M,S,N<:MutableNNC}(NN::$NNsym{M,S,N}, v::Int, r)
         if !isdefined(NN.$cacheD.D, v)
@@ -175,7 +175,7 @@ function inball{S}(V::Vector{S}, dist::ChoppedPreMetric, DS::TreeDistanceDS, v::
     SparseVector(length(V), inds[nn_bool], ds[nn_bool])
 end
 
-for ff in [x -> symbol("inball", x), x -> symbol("inball", x, "!")]
+for ff in [x -> Symbol("inball", x), x -> Symbol("inball", x, "!")]
     @eval $(ff("F"))(NN::MetricNN, args...) = $(ff(""))(NN, args...)
     @eval $(ff("B"))(NN::MetricNN, args...) = $(ff(""))(NN, args...)
 end

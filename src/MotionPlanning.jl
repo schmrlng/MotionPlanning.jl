@@ -1,3 +1,5 @@
+# __precompile__()
+
 module MotionPlanning
 
 import PyPlot; const plt = PyPlot
