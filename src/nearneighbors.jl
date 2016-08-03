@@ -59,7 +59,7 @@ abstract DistanceDataStructure{T}; begin
 end
 
 ### Construction
-type MetricNN{M<:Metric,S<:State,N<:NearNeighborCache,D<:DistanceDataStructure,U<:ControlCache} <: SampleSet
+type MetricNN{M<:SymmetricDistance,S<:State,N<:NearNeighborCache,D<:DistanceDataStructure,U<:ControlCache} <: SampleSet
     V::Vector{S}
     dist::M
     init::S
@@ -67,13 +67,14 @@ type MetricNN{M<:Metric,S<:State,N<:NearNeighborCache,D<:DistanceDataStructure,U
     DS::D
     US::U
 end
-function MetricNN{S<:State}(V::Vector{S}, dist::Metric, init::S)
+function MetricNN{S<:State}(V::Vector{S}, dist::SymmetricDistance, init::S)
     N = length(V)
     T = eltype(S)
     MetricNN(V, dist, init, MutableNNC(N,T), helper_data_structures(V, dist)...)
 end
 
-type QuasiMetricNN{M<:QuasiMetric,S<:State,N<:NearNeighborCache,D<:DistanceDataStructure,U<:ControlCache} <: SampleSet
+type QuasiMetricNN{M<:AsymmetricDistance,S<:State,N<:NearNeighborCache,
+                   D<:DistanceDataStructure,U<:ControlCache} <: SampleSet
     V::Vector{S}
     dist::M
     init::S
@@ -84,15 +85,16 @@ type QuasiMetricNN{M<:QuasiMetric,S<:State,N<:NearNeighborCache,D<:DistanceDataS
     DSB::D
     USB::U
 end
-function QuasiMetricNN{S<:State}(V::Vector{S}, dist::QuasiMetric, init::S)
+function QuasiMetricNN{S<:State}(V::Vector{S}, dist::AsymmetricDistance, init::S)
     N = length(V)
     T = eltype(S)
     QuasiMetricNN(V, dist, init, MutableNNC(N,T), MutableNNC(N,T), helper_data_structures(V, dist)...)
 end
 
 ## Fallbacks (should usually be extended)
-helper_data_structures{S}(V::Vector{S}, d::Metric) = (EmptyDistanceDS(eltype(S)), EmptyControlCache(controltype(d)))
-function helper_data_structures{S}(V::Vector{S}, d::QuasiMetric)
+helper_data_structures{S}(V::Vector{S}, d::SymmetricDistance) = (EmptyDistanceDS(eltype(S)),
+                                                                 EmptyControlCache(controltype(d)))
+function helper_data_structures{S}(V::Vector{S}, d::AsymmetricDistance)
     DS, US = EmptyDistanceDS(eltype(S)), EmptyControlCache(controltype(d))
     (DS, US, DS, US)
 end

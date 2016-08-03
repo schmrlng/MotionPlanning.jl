@@ -126,6 +126,8 @@ for M in (:ChoppedMetric, :ChoppedQuasiMetric)
                                                                    changeprecision(T, x.lowerbound),
                                                                    T(x.chopval))
 end
+typealias SymmetricDistance Union{Metric, ChoppedMetric}
+typealias AsymmetricDistance Union{QuasiMetric, ChoppedQuasiMetric}
 
 ### Steering
 export ControlInfo, NullControl, StepControl, DurationAndTargetControl
