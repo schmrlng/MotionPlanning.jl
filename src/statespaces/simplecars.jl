@@ -24,10 +24,10 @@ changeprecision{T<:AbstractFloat}(::Type{T}, dist::ReedsSheppExact) = ReedsShepp
 changeprecision{T<:AbstractFloat}(::Type{T}, dist::DubinsExact) = DubinsExact(T(dist.r))
 
 ## (Quasi)Metric Space Instantiation
-ReedsSheppMetricSpace{T}(r::T, lo = zero(Vec{2,T}), hi = one(Vec{2,T})) =
-    SE2StateSpace(lo, hi, ChoppedMetric(ReedsSheppExact(r), Euclidean(), T(Inf)), ExtractVector())
-DubinsQuasiMetricSpace{T}(r::T, lo = zero(Vec{2,T}), hi = one(Vec{2,T})) =
-    SE2StateSpace(lo, hi, ChoppedQuasiMetric(DubinsExact(r), Euclidean(), T(Inf)), ExtractVector())
+ReedsSheppMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T})) =
+    SE2StateSpace(SVector(lo), SVector(hi), ChoppedMetric(ReedsSheppExact(r), Euclidean(), T(Inf)), VectorView(1:2))
+DubinsQuasiMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T})) =
+    SE2StateSpace(SVector(lo), SVector(hi), ChoppedQuasiMetric(DubinsExact(r), Euclidean(), T(Inf)), VectorView(1:2))
 
 function helper_data_structures{S<:SE2State,R<:ReedsSheppExact}(V::Vector{S}, M::ChoppedMetric{R})
     TreeDistanceDS(KDTree(statevec2mat(V)[1:2,:], M.lowerbound; reorder=false)), EmptyControlCache()
@@ -38,20 +38,20 @@ function helper_data_structures{S<:SE2State,R<:DubinsExact}(V::Vector{S}, M::Cho
     DS, US, DS, US
 end
 # Required for CLBM
-evaluate(M::Euclidean, v::SE2State, w::SE2State) = norm(v.x - w.x)
-inrange(tree::NearestNeighbors.NNTree, v::SE2State, args...) = inrange(tree, dense(v.x), args...)
+evaluate(M::Euclidean, v::SE2State, w::SE2State) = norm(v[(1,2)] - w[(1,2)])
+inrange{T<:AbstractFloat}(t::NearestNeighbors.NNTree{T}, v::SE2State{T}, r::T, s=false) = inrange(t, v[(1,2)], r, s)
 
 ### Steering
 function propagate{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2})
     s = u.u[1]
     invr = u.u[2]
     if abs(u.t*s*invr) > 10*eps(T)
-        SE2State(v.x[1] + (sin(v.θ + u.t*s*invr) - sin(v.θ))/invr,
-                 v.x[2] + (cos(v.θ) - cos(v.θ + u.t*s*invr))/invr,
+        SE2State(v.x + (sin(v.θ + u.t*s*invr) - sin(v.θ))/invr,
+                 v.y + (cos(v.θ) - cos(v.θ + u.t*s*invr))/invr,
                  mod2piF(v.θ + u.t*s*invr))
     else
-        SE2State(v.x[1] + u.t*s*cos(v.θ),
-                 v.x[2] + u.t*s*sin(v.θ),
+        SE2State(v.x + u.t*s*cos(v.θ),
+                 v.y + u.t*s*sin(v.θ),
                  mod2piF(v.θ + u.t*s*invr))
     end
 end
@@ -65,15 +65,15 @@ function collision_waypoints{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepCo
     if m == 0
         [v]
     else
-        unshift!([SE2State(v.x[1] + (sin(v.θ + i*θres) - sin(v.θ))/invr,
-                           v.x[2] + (cos(v.θ) - cos(v.θ + i*θres))/invr,
+        unshift!([SE2State(v.x + (sin(v.θ + i*θres) - sin(v.θ))/invr,
+                           v.y + (cos(v.θ) - cos(v.θ + i*θres))/invr,
                            mod2piF(v.θ + i*θres)) for i in 1:m], v)
     end
 end
 
 ### Simple Car Steering Nuts and Bolts
-carsegment2stepcontrol{T}(t::Int, d::T) = StepControl(abs(d), Vec(T(sign(d)), T(t)))
-scaleradius{T}(u::StepControl{T,2}, r::T) = StepControl(u.t*r, Vec(u.u[1], u.u[2]/r))
+carsegment2stepcontrol{T}(t::Int, d::T) = StepControl(abs(d), SVector(T(sign(d)), T(t)))
+scaleradius{T}(u::StepControl{T,2}, r::T) = StepControl(u.t*r, SVector(u.u[1], u.u[2]/r))
 function scaleradius!(u::ZeroOrderHoldControl, r)
     for i in 1:length(u)
         u[i] = scaleradius(u[i], r)
@@ -180,7 +180,7 @@ function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
 end
 
 function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(StepControl{T,2}, 3))
-    v = (s2.x - s1.x) / r
+    v = (s2[(1,2)] - s1[(1,2)]) / r
     d = norm(v)
     th = atan2(v)
     a = mod2piF(s1.θ - th)
@@ -196,19 +196,19 @@ function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(S
     cmin*r, scaleradius!(pmin, r)
 end
 
-function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
-                           fname = joinpath(Pkg.dir("MotionPlanning"), "src", "statespaces",
-                                            @sprintf("Dubins_%.2f_%.2f_%d_%d_%d.gz", Xmax, Ymax, Nx, Ny, Nt)))
-    segment_to_string(s) = (s.t == 1 ? " L " : s.t == 0 ? " S " : " R ") * @sprintf("%.3f", s.d)
-    v = SE2State(0., 0., 0.)
-    fh = GZip.open(fname, "w")
-    for t in [2pi*(i-1)/Nt for i in 1:Nt], y in linspace(-Ymax, Ymax, Ny), x in linspace(-Xmax, Xmax, Nx)
-        c, p = dubins(v, SE2State(x, y, t))
-        cacheline = @sprintf("%.6f ", c) * prod([segment_to_string(s) for s in p]) * "\n"
-        write(fh, cacheline)
-    end
-    GZip.close(fh)
-end
+# function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
+#                            fname = joinpath(Pkg.dir("MotionPlanning"), "src", "statespaces",
+#                                             @sprintf("Dubins_%.2f_%.2f_%d_%d_%d.gz", Xmax, Ymax, Nx, Ny, Nt)))
+#     segment_to_string(s) = (s.t == 1 ? " L " : s.t == 0 ? " S " : " R ") * @sprintf("%.3f", s.d)
+#     v = SE2State(0., 0., 0.)
+#     fh = GZip.open(fname, "w")
+#     for θ in [2pi*(i-1)/Nt for i in 1:Nt], y in linspace(-Ymax, Ymax, Ny), x in linspace(-Xmax, Xmax, Nx)
+#         c, p = dubins(v, SE2State(x, y, θ))
+#         cacheline = @sprintf("%.6f ", c) * prod([segment_to_string(s) for s in p]) * "\n"
+#         write(fh, cacheline)
+#     end
+#     GZip.close(fh)
+# end
 
 ## Reeds-Shepp Steering Nuts and Bolts
 # Utilities (pedantic about typing to guard against problems)
@@ -226,18 +226,18 @@ function Tau{T}(u::T, v::T, E::T, N::T)
     t < 0 ? M(θ + pi) : M(θ)
 end
 Omega{T}(u::T, v::T, E::T, N::T, t::T) = M(Tau(u, v, E, N) - u + v - t)
-timeflip{T}(s::SE2State{T}) = SE2State(-s.x[1], s.x[2], -s.θ)
-reflect{T}(s::SE2State{T}) = SE2State(s.x[1], -s.x[2], -s.θ)
-backwards{T}(s::SE2State{T}) = SE2State(s.x[1]*cos(s.θ) + s.x[2]*sin(s.θ), s.x[1]*sin(s.θ) - s.x[2]*cos(s.θ), s.θ)
+timeflip{T}(s::SE2State{T}) = SE2State(-s.x, s.y, -s.θ)
+reflect{T}(s::SE2State{T}) = SE2State(s.x, -s.y, -s.θ)
+backwards{T}(s::SE2State{T}) = SE2State(s.x*cos(s.θ) + s.y*sin(s.θ), s.x*sin(s.θ) - s.y*cos(s.θ), s.θ)
 function timeflip!(u::ZeroOrderHoldControl)
     for i in 1:length(u)
-        u[i] = StepControl(u[i].t, Vec(-u[i].u[1], u[i].u[2]))
+        u[i] = StepControl(u[i].t, SVector(-u[i].u[1], u[i].u[2]))
     end
     u
 end
 function reflect!(u::ZeroOrderHoldControl)
     for i in 1:length(u)
-        u[i] = StepControl(u[i].t, Vec(u[i].u[1], -u[i].u[2]))
+        u[i] = StepControl(u[i].t, SVector(u[i].u[1], -u[i].u[2]))
     end
     u
 end
@@ -248,7 +248,7 @@ const POST, POST_T, POST_R, POST_B, POST_R_T, POST_B_T, POST_B_R, POST_B_R_T = 0
 
 # Gotta check 'em all
 function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(StepControl{T,2}, 5))
-    dx, dy = (s2.x - s1.x) / r
+    dx, dy = (s2[(1,2)] - s1[(1,2)]) / r
     ct, st = cos(s1.θ), sin(s1.θ)
     target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, mod2piF(s2.θ - s1.θ))
 
@@ -504,5 +504,5 @@ function LpRmSmLmRp!{T}(tx::T, ty::T, tt::T, c::T, l::Int, path::Vector{StepCont
 end
 
 for f in (:LpSpLp!, :LpSpRp!, :LpRmLp!, :LpRmLm!, :LpRpuLmuRm!, :LpRmuLmuRp!, :LpRmSmLm!, :LpRmSmRm!, :LpRmSmLmRp!)
-    @eval $f{T}(s::SE2State{T}, c::T, l::Int, p::Vector{StepControl{T,2}}) = $f(s.x[1], s.x[2], s.θ, c, l, p)
+    @eval $f{T}(s::SE2State{T}, c::T, l::Int, p::Vector{StepControl{T,2}}) = $f(s.x, s.y, s.θ, c, l, p)
 end

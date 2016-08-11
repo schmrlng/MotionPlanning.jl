@@ -30,22 +30,24 @@ end
 LinearQuadratic{T}(A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Matrix{T}, cmax::T = T(1)) =
     LinearQuadratic(LinearQuadratic2BVP(A, B, c, R), cmax)
 setup_steering(d::LinearQuadratic, r) = (d.cmax = r)
-steer(d::LinearQuadratic, v::Vec, w::Vec) = steer(d.bvp, v, w, d.cmax)
+steer(d::LinearQuadratic, v::AbstractVector, w::AbstractVector) = steer(d.bvp, v, w, d.cmax)
 
-evaluate(d::LinearQuadratic, v::Vec, w::Vec) = steer(d, v, w)[1]
+evaluate(d::LinearQuadratic, v::AbstractVector, w::AbstractVector) = steer(d, v, w)[1]
 changeprecision{T<:AbstractFloat}(::Type{T}, d::LinearQuadratic) =
     LinearQuadratic(LinearQuadratic2BVP((map(T,x) for x in (d.bvp.A, d.bvp.B, d.bvp.c, d.bvp.R))...), T(d.cmax))
 
 ### QuasiMetric Space Instantiation
-LinearQuadraticQuasiMetricSpace(lo::Vec, hi::Vec, A::Matrix, B::Matrix, c::Vector, R::Matrix, C::Matrix) =
-    RealVectorStateSpace(lo, hi, LinearQuadratic(A, B, c, R), OutputMatrix(C))
+function LinearQuadraticQuasiMetricSpace(lo::AbstractVector, hi::AbstractVector,
+                                         A::Matrix, B::Matrix, c::Vector, R::Matrix, C::Matrix)
+    RealVectorStateSpace(SVector(lo), SVector(hi), LinearQuadratic(A, B, c, R), OutputMatrix(C))
+end
 function DoubleIntegrator(d::Int, lo = zeros(d), hi = ones(d); vmax = 1.5, r = 1.)
     A = [zeros(d,d) eye(d); zeros(d,2d)]
     B = [zeros(d,d); eye(d)]
     c = zeros(2d)
     R = r*eye(d)
     C = [eye(d) zeros(d,d)]
-    LinearQuadraticQuasiMetricSpace(Vec([lo; -vmax*ones(d)]), Vec([hi; vmax*ones(d)]), A, B, c, R, C)
+    LinearQuadraticQuasiMetricSpace(SVector([lo; -vmax*ones(d)]), SVector([hi; vmax*ones(d)]), A, B, c, R, C)
 end
 function WebbJvdB13quad10d()
     g = 9.8
@@ -61,7 +63,7 @@ function WebbJvdB13quad10d()
     c = zeros(10)
 end
 
-function helper_data_structures{S<:Vec}(V::Vector{S}, M::LinearQuadratic, batchsize = 1001)
+function helper_data_structures{S}(V::Vector{S}, M::LinearQuadratic, batchsize = 1001)
     N = length(V)
     DUpairs = [steer_pairwise(M.bvp, V, V[rng], M.cmax) for rng in [i:min(i+batchsize-1, N) for i in 1:batchsize:N]]
     Dmat = hcat([D for (D,U) in DUpairs]...)
@@ -73,12 +75,12 @@ function helper_data_structures{S<:Vec}(V::Vector{S}, M::LinearQuadratic, batchs
 end
 
 ### Steering
-propagate(d::LinearQuadratic, v::Vec, u::DurationAndTargetControl) = u.x
-propagate(d::LinearQuadratic, v::Vec, u::DurationAndTargetControl, s::AbstractFloat) =
-    s <= 0 ? v : s >= u.t ? u.x : d.bvp.x(v, u.x, u.t, s)
+propagate(d::LinearQuadratic, v::AbstractVector, u::DurationAndTargetControl) = typeof(v)(u.x)
+propagate(d::LinearQuadratic, v::AbstractVector, u::DurationAndTargetControl, s::AbstractFloat) =
+    s <= 0 ? v : s >= u.t ? typeof(v)(u.x) : typeof(v)(d.bvp.x(v, u.x, u.t, s))
 
-steering_control(d::LinearQuadratic, v::Vec, w::Vec) = DurationAndTargetControl(steer(d,v,w)[2], w)
-function collision_waypoints(d::LinearQuadratic, v::Vec, w::Vec)
+steering_control(d::LinearQuadratic, v::AbstractVector, w::AbstractVector) = DurationAndTargetControl(steer(d,v,w)[2],w)
+function collision_waypoints(d::LinearQuadratic, v::AbstractVector, w::AbstractVector)
     t = steer(d, v, w)[2]
     [d.bvp.x(v, w, t, s) for s in linspace(typeof(t)(0), t, 5)]
 end
@@ -99,10 +101,10 @@ function Sym2Function(s::SymPy.Sym, args::Union{Symbol, Expr} = :t, replace_rule
     end
     @eval $args -> $(parse(sliteral))
 end
-function Sym2Function(s::Vector{SymPy.Sym}, args::Union{Symbol, Expr} = :t, replace_rules = (); fsa = false)
-    vliteral = (fsa ? "Vec(" : "[") *
+function Sym2Function(s::Vector{SymPy.Sym}, args::Union{Symbol, Expr} = :t, replace_rules = (); sv = false)
+    vliteral = (sv ? "SVector(" : "[") *
                join(map(x -> string(SymPy.simplify(SymPy.expand(x))), s), ", ") *
-               (fsa ? ")" : "]")
+               (sv ? ")" : "]")
     for rr in replace_rules
         vliteral = replace(vliteral, rr...)
     end
@@ -144,14 +146,14 @@ function LinearQuadratic2BVP{T}(A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Mat
                         Sym2Function(GinvS, :(t::$T), replace_rules),
                         Sym2Function(expAtS, :(t::$T), replace_rules),
                         Sym2Function(cdriftS, :(t::$T), replace_rules),
-                        Sym2Function(costS, :(x::Vec{$n,$T}, y::Vec{$n,$T}, t::$T), replace_rules),
-                        Sym2Function(dcostS, :(x::Vec{$n,$T}, y::Vec{$n,$T}, t::$T), replace_rules),
-                        Sym2Function(ddcostS, :(x::Vec{$n,$T}, y::Vec{$n,$T}, t::$T), replace_rules),
-                        Sym2Function(xS, :(x::Vec{$n,$T}, y::Vec{$n,$T}, t::$T, s::$T), replace_rules, fsa=true))
+                        Sym2Function(costS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
+                        Sym2Function(dcostS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
+                        Sym2Function(ddcostS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
+                        Sym2Function(xS, :(x::AbstractVector, y::AbstractVector, t::$T, s::$T), replace_rules, sv=true))
 end
 
 ## Time-Optimal 2BVP
-function topt_bisection{T}(dc, x0::Vec, x1::Vec, tm::T; tol = T(1e-3))
+function topt_bisection{T}(dc, x0::AbstractVector, x1::AbstractVector, tm::T; tol = T(1e-3))
     # Bisection
     b = tm
     dc(x0, x1, b) < 0 && return tm
@@ -166,7 +168,7 @@ function topt_bisection{T}(dc, x0::Vec, x1::Vec, tm::T; tol = T(1e-3))
     end
     m
 end
-function topt_newton{T}(dc, ddc, x0::Vec, x1::Vec, tm::T; tol = T(1e-6))
+function topt_newton{T}(dc, ddc, x0::AbstractVector, x1::AbstractVector, tm::T; tol = T(1e-6))
     # Bisection / Newton's method combo
     b = tm
     dc(x0, x1, b) < 0 && return tm
@@ -182,12 +184,12 @@ function topt_newton{T}(dc, ddc, x0::Vec, x1::Vec, tm::T; tol = T(1e-6))
     end
     t
 end
-function steer(L::LinearQuadratic2BVP, x0, x1, r)
+function steer(L::LinearQuadratic2BVP, x0::AbstractVector, x1::AbstractVector, r::AbstractFloat)
     x0 == x1 && return zero(r), zero(r)
     t = isa(r, Float64) ? topt_newton(L.dcost, L.ddcost, x0, x1, r) : topt_bisection(L.dcost, x0, x1, r)
     L.cost(x0, x1, t), t
 end
-function steer_pairwise{T,S<:Vec}(L::LinearQuadratic2BVP{T}, V::Vector{S}, W::Vector{S}, r)
+function steer_pairwise{T,S<:AbstractVector}(L::LinearQuadratic2BVP{T}, V::Vector{S}, W::Vector{S}, r::AbstractFloat)
     M = length(V)
     N = length(W)
     Vmat = statevec2mat(V)

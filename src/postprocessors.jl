@@ -15,7 +15,7 @@ function shortcut(path::Path, CC::CollisionChecker)
     return [shortcut(path[1:mid], CC)[1:end-1]; shortcut(path[mid:end], CC)]
 end
 
-@unfix function cut_corner(v1::Vec, v2::Vec, v3::Vec, CC::CollisionChecker)
+function cut_corner(v1::State, v2::State, v3::State, CC::CollisionChecker)
     m1 = (v1 + v2)/2
     m2 = (v3 + v2)/2
     while !is_free_motion(m1, m2, CC)
@@ -35,7 +35,7 @@ function adaptive_shortcut(path::Path, CC::CollisionChecker, iterations::Int = 1
             path = short_path
         end
     end
-    return path, cumsum([0; vec(mapslices(norm, diff(hcat(path...), 2), 1))])
+    return path, cumsum([0; map(norm, diff(path))])
 end
 
 function adaptive_shortcut!(P::MPProblem, iterations::Int = 10)

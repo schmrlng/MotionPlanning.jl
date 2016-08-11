@@ -1,4 +1,4 @@
-import Base: getindex, eltype, convert, length, hcat
+import Base: getindex, eltype, convert, length
 import Distances: evaluate, colwise
 import NearestNeighbors: inrange
 
@@ -6,83 +6,60 @@ import NearestNeighbors: inrange
 export AbstractState, State, Path, AbstractBitsState, BitsState
 export statevec2mat, statemat2vec, changeprecision, dense
 
-"The `supertype` for all non-vector states."
+"The `supertype` for all non-`AbstractVector` states."
 abstract AbstractState
-"Type union of all states, including user-defined (`AbstractState`) and mutable/immutable vectors."
-typealias State Union{AbstractVector, FixedVector, AbstractState}
+"Type union of all states, encompassing `AbstractVector`s and `AbstractState`s."
+typealias State Union{AbstractVector, AbstractState}
 "Shorthand for a list (`Vector`) of states."
 typealias Path{S<:State} Vector{S}
-"The `supertype` for all non-`FixedVector` states that satisfy `isbits(S) == true`."
+"The `supertype` for all non-`SVector` states that satisfy `isbits(S) == true`."
 abstract AbstractBitsState <: AbstractState
-"Type union encompassing all states that satisfy `isbits(S) == true`."
-typealias BitsState Union{FixedVector, AbstractBitsState}
+"Type union encompassing all states that may satisfy `isbits(S) == true`."
+typealias BitsState Union{SVector, FieldVector, AbstractBitsState}
 
-"Reinterprets a list of `BitsState`s as a `Matrix` without copying/re-allocating memory."
-statevec2mat{S<:BitsState}(V::Vector{S}) =
-    isbits(S) ? reinterpret(eltype(S), V, (length(S), length(V))) : error("eltype of BitsState may not be a bitstype?")
-"Reinterprets a `Matrix` as a column-wise list of `BitsState`s."
-statemat2vec{S<:BitsState,T}(::Type{S}, M::Matrix{T}) =
-    isbits(S) && length(S) == size(M,1) ? reinterpret(S, M, (size(M,2),)) : error("State/Matrix size mismatch?")
-"Convert a `State` to a `Vector`."
-dense{S<:State}(x::S) = convert(Vector{eltype(S)}, x)
+"Reinterprets a list of `BitsState`s as a `Matrix` without copying/re-allocating memory."    # TODO: methods for nonbits
+function statevec2mat{S<:BitsState}(V::Vector{S})
+    isbits(S) ? reinterpret(eltype(S), V, (length(S), length(V))) : error("$S must satisfy isbits($S) = true")
+end
+statevec2mat{S<:BitsState}(V::S...) = statevec2mat(collect(V))
+statevec2mat{N,S<:BitsState}(V::NTuple{N,S}) = statevec2mat(collect(V))
+"Reinterprets a `Matrix` as a column-wise list of `BitsState`s without copying/re-allocating memory."
+function statemat2vec{S<:BitsState,T}(::Type{S}, M::Matrix{T})
+    if isbits(S)
+        length(S) == size(M,1) ? reinterpret(S, M, (size(M,2),)) : error("$S size mismatch with Matrix")
+    else
+        error("$S must satisfy isbits($S) = true")
+    end
+end
 "Convert `x` to a similar type with numerical precision `T <: AbstractFloat` (e.g. `Float64`, `Float32`, etc.)."
-changeprecision{T<:AbstractFloat,S<:State}(::Type{T}, x::S) = convert(changeprecision(T,S), x)
-changeprecision{T<:AbstractFloat}(::Type{T}, x::Vector) = [changeprecision(T,i) for i in x]
-changeprecision{T<:AbstractFloat}(::Type{T}, x::AbstractFloat) = T(x)
-changeprecision{T<:AbstractFloat}(::Type{T}, x) = x
+changeprecision{T<:AbstractFloat,S}(::Type{T}, x::S) = convert(changeprecision(T,S), x)
+changeprecision{T<:AbstractFloat,S,N}(::Type{T}, ::Type{Array{S,N}}) = Array{changeprecision(T,S),N}
+changeprecision{T<:AbstractFloat,S<:Real,N}(::Type{T}, ::Type{Array{S,N}}) = Array{T,N}
+changeprecision{T<:AbstractFloat,N,S<:Real}(::Type{T}, ::Type{SVector{N,S}}) = SVector{N,T}
+changeprecision{T<:AbstractFloat,N1,N2,S<:Real,L}(::Type{T}, ::Type{SMatrix{N1,N2,S,L}}) = SMatrix{N1,N2,T,L}
+changeprecision{T<:AbstractFloat,S<:Real}(::Type{T}, ::Type{S}) = T
+changeprecision{T<:AbstractFloat,S}(::Type{T}, ::Type{S}) = S
 
 ## SE2State
 export SE2State
 
-"State consisting of a position x ∈ R^2 and an angle θ ∈ R."
-immutable SE2State{T<:AbstractFloat} <: AbstractBitsState
-    x::Vec{2,T}
+"State consisting of a position (x,y) ∈ R^2 and an angle θ ∈ R."
+immutable SE2State{T} <: FieldVector{T}
+    x::T
+    y::T
     θ::T
 end
-SE2State{T<:AbstractFloat}(x::T, y::T, θ::T) = SE2State(Vec{2,T}(x,y), θ)
-SE2State{T<:AbstractFloat}(x::Vector{T}) = SE2State(x[1], x[2], x[3])
-function getindex(s::SE2State, d::Symbol)  # incurs a slight performance hit over direct element access
-    if d == :x
-        return s.x[1]
-    elseif d == :y
-        return s.x[2]
-    elseif d == :θ || d == :t
-        return s.θ
-    end
-    throw(KeyError(d))
-end
-eltype{T}(::SE2State{T}) = T
-eltype{T}(::Type{SE2State{T}}) = T
-length{T}(::SE2State{T}) = 3
-length{T}(::Type{SE2State{T}}) = 3
-convert{T}(::Type{Vector{T}}, s::SE2State) = T[s.x[1], s.x[2], s.θ]
-convert{T}(::Type{SE2State{T}}, s::SE2State) = SE2State(T(s.x[1]), T(s.x[2]), T(s.θ))
-convert{T}(::Type{SE2State{T}}, x::Vector) = SE2State(T(x[1]), T(x[2]), T(x[3]))
-changeprecision{T<:AbstractFloat,S}(::Type{T}, ::Type{SE2State{S}}) = SE2State{T}
+changeprecision{T<:AbstractFloat,S<:Real}(::Type{T}, ::Type{SE2State{S}}) = SE2State{T}
 
-## Vec (defined in FixedSizeArrays)
-export Vec
-
-function hcat{N,T}(X::Vec{N,T}...)
-    # warn("Should this hcat of `Vec`s be a statevec2mat?")
-    result = Array(T, N, length(X))
-    @inbounds for i in 1:length(X), j in 1:N
-        result[j,i] = X[i][j]
-    end
-    result
-end
-changeprecision{N,T<:AbstractFloat,S}(::Type{T}, ::Type{Vec{N,S}}) = Vec{N,T}
-
-## Vector
-changeprecision{T<:AbstractFloat,S<:AbstractFloat}(::Type{T}, ::Type{Vector{S}}) = Vector{T}
 
 ### StateSpace Typedefs
 export StateSpace, State2Workspace
 
-"The `supertype` for all state spaces."
+"The `supertype` for all state spaces; the type parameter indicates numerical precision."
 abstract StateSpace{T<:AbstractFloat}
 "Encodes a transformation from the state space (dynamics) to the workspace (obstacles)."
 abstract State2Workspace
+
 
 ### Metrics and QuasiMetrics
 export QuasiMetric, PreMetric, Metric, ChoppedMetric, ChoppedQuasiMetric, ChoppedPreMetric
@@ -96,7 +73,7 @@ colwise{S<:State}(d::PreMetric, W::Vector{S}, v::S) = eltype(S)[evaluate(d, w, v
 
 ## Chopped, Lower-Bounded Metrics
 """
-Evaluates as `min(m(v, w), chopval)` for points `v` and `w`.\n
+Evaluates as `m(v, w) <= chopval ? m(v, w) : Inf` for points `v` and `w`.\n
 `lowerbound` should be easier to evaluate than `m` and must satisfy `lowerbound(v, w) ≤ m(v, w)` for all `v`, `w`.
 """
 type ChoppedMetric{M<:Metric,B<:Metric,T<:AbstractFloat} <: PreMetric
@@ -105,7 +82,7 @@ type ChoppedMetric{M<:Metric,B<:Metric,T<:AbstractFloat} <: PreMetric
     chopval::T
 end
 """
-Evaluates as `min(m(v, w), chopval)` for points `v` and `w`.\n
+Evaluates as `m(v, w) <= chopval ? m(v, w) : Inf` for points `v` and `w`.\n
 `lowerbound` should be easier to evaluate than `m` and must satisfy `lowerbound(v, w) ≤ m(v, w)` for all `v`, `w`.
 """
 type ChoppedQuasiMetric{M<:QuasiMetric,B<:Metric,T<:AbstractFloat} <: PreMetric
@@ -117,8 +94,8 @@ end
 typealias ChoppedPreMetric{M,B,T} Union{ChoppedMetric{M,B,T}, ChoppedQuasiMetric{M,B,T}}
 function evaluate(clbm::ChoppedPreMetric, v::State, w::State)
     lb = evaluate(clbm.lowerbound, v, w)
-    lb >= clbm.chopval && return oftype(clbm.chopval, Inf)  # Inf is a sentinel value more numerically robust than using
-    d = evaluate(clbm.m, v, w)                              # chopval; technically doesn't satisfy metric inequality
+    lb > clbm.chopval && return oftype(clbm.chopval, Inf)   # Inf is a sentinel value more numerically robust than using
+    d = evaluate(clbm.m, v, w)                              # chopval; technically breaks the metric inequality
     d <= clbm.chopval ? d : oftype(clbm.chopval, Inf)
 end
 for M in (:ChoppedMetric, :ChoppedQuasiMetric)
@@ -129,6 +106,7 @@ end
 typealias SymmetricDistance Union{Metric, ChoppedMetric}
 typealias AsymmetricDistance Union{QuasiMetric, ChoppedQuasiMetric}
 
+
 ### Steering
 export ControlInfo, NullControl, StepControl, DurationAndTargetControl
 export ControlSequence, ZeroOrderHoldControl, TimestampedTrajectoryControl
@@ -138,18 +116,19 @@ abstract ControlInfo
 immutable NullControl <: ControlInfo end
 immutable StepControl{T<:AbstractFloat,N} <: ControlInfo
     t::T
-    u::Vec{N,T}
+    u::SVector{N,T}
 end
+StepControl{T}(t::T, u::AbstractVector{T}) = StepControl(t, SVector(u))
 immutable DurationAndTargetControl{T<:AbstractFloat,N} <: ControlInfo
     t::T
-    x::Vec{N,T}
+    x::SVector{N,T}
 end
+DurationAndTargetControl{T}(t::T, x::AbstractVector{T}) = DurationAndTargetControl(t, SVector(x))
 typealias ControlSequence{C<:ControlInfo} Vector{C}
 typealias ZeroOrderHoldControl{C<:StepControl} Vector{C}
 typealias TimestampedTrajectoryControl{C<:DurationAndTargetControl} Vector{C}
 
-duration(x::StepControl) = x.t
-duration(x::DurationAndTargetControl) = x.t
+duration(x::ControlInfo) = x.t
 duration(x::ControlSequence) = sum(duration(s) for s in x)
 function splitcontrol{T}(x::StepControl{T}, t::Real)
     if t < 0

@@ -5,35 +5,35 @@ rectangle_corners(lo, hi) = ([lo[1],hi[1],hi[1],lo[1],lo[1]], [lo[2],lo[2],hi[2]
 function plot_rectangle(lo, hi; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     X, Y = rectangle_corners(lo, hi)
     plt.fill(clamp(X, xmin, xmax),
-               clamp(Y, ymin, ymax),
-               edgecolor="black", zorder=0; kwargs...)
+             clamp(Y, ymin, ymax),
+             edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_polygon(pts; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
-    XY = hcat(pts...)'
+    XY = statevec2mat(pts)'
     plt.fill(clamp(XY[:,1], xmin, xmax),
-               clamp(XY[:,2], ymin, ymax),
-               edgecolor="black", zorder=0; kwargs...)
+             clamp(XY[:,2], ymin, ymax),
+             edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_circle(c, r; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     plt.fill(clamp(c[1] + r*cos(linspace(0, 2pi, 40)), xmin, xmax),
-               clamp(c[2] + r*sin(linspace(0, 2pi, 40)), ymin, ymax),
-               edgecolor="black", zorder=0; kwargs...)
+             clamp(c[2] + r*sin(linspace(0, 2pi, 40)), ymin, ymax),
+             edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_ellipse(c, a, b, t; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     XY = [a*cos(linspace(0, 2pi, 40)) b*sin(linspace(0, 2pi, 40))]*[cos(t) sin(t); -sin(t) cos(t)]
     plt.fill(clamp(c[1] + XY[:,1], xmin, xmax),
-               clamp(c[2] + XY[:,2], ymin, ymax),
-               edgecolor="black", zorder=0; kwargs...)
+             clamp(c[2] + XY[:,2], ymin, ymax),
+             edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_ellipse(c, Sigma; xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, kwargs...)
     XY = [cos(linspace(0, 2pi, 40)) sin(linspace(0, 2pi, 40))]*chol(full(Sigma))
     plt.fill(clamp(c[1] + XY[:,1], xmin, xmax),
-               clamp(c[2] + XY[:,2], ymin, ymax),
-               edgecolor="black", zorder=0; kwargs...)
+             clamp(c[2] + XY[:,2], ymin, ymax),
+             edgecolor="black", zorder=0; kwargs...)
 end
 
 function plot_bounds(lo = zeros(2), hi = ones(2))
@@ -47,7 +47,7 @@ function plot_graph(V::Matrix, F; kwargs...)  # learn how to just pass kwargs
     Y = vcat([V[2,idx_list] for idx_list in findn(triu(F))]..., fill(nothing, 1, sum(triu(F))))[:]
     plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
-plot_graph(V::Vector, F; kwargs...) = plot_graph(hcat(V...), F; kwargs...)
+plot_graph(V::Vector, F; kwargs...) = plot_graph(statevec2mat(V), F; kwargs...)
 
 function plot_tree(V::Matrix, A; kwargs...)
     plt.scatter(V[1,:], V[2,:], zorder=1; kwargs...)
@@ -55,7 +55,7 @@ function plot_tree(V::Matrix, A; kwargs...)
     Y = vcat(V[2,find(A)], V[2,A[find(A)]], fill(nothing, 1, countnz(A)))[:]
     plt.plot(X, Y, linewidth=.5, linestyle="-", zorder=1; kwargs...)
 end
-plot_tree(V::Vector, A; kwargs...) = plot_tree(hcat(V...), A; kwargs...)
+plot_tree(V::Vector, A; kwargs...) = plot_tree(statevec2mat(V), A; kwargs...)
 
 function plot_line_segments(P1::Vector, P2::Vector; kwargs...)
     X = [[v[1] for v in P1]'; [v[1] for v in P2]'; fill(nothing, 1, length(P1))][:]
@@ -66,7 +66,7 @@ end
 function plot_path(V::Matrix, idx_list = 1:size(V,2); kwargs...)
     plt.plot(V[1,idx_list], V[2,idx_list], linewidth=1.0, linestyle="-", zorder=2; kwargs...)
 end
-plot_path(V::Vector, idx_list = 1:length(V); kwargs...) = plot_path(hcat(V...), idx_list; kwargs...)
+plot_path(V::Vector, idx_list = 1:length(V); kwargs...) = plot_path(statevec2mat(V), idx_list; kwargs...)
 
 function save_plot(fname, title_string = "")
     plt.axis("off")

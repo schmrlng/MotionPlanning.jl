@@ -221,4 +221,6 @@ function bvls(A::AbstractMatrix, b::AbstractVector, l::AbstractVector, u::Abstra
     end
 end
 
-bvls{m,n}(A::Mat{m,n}, b::Vec{m}, l::Vec{n}, u::Vec{n}) = Vec(bvls(dense(A), dense(b), dense(l), dense(u)))
+function bvls{m,n}(A::SMatrix{m,n}, b::SVector{m}, l::SVector{n}, u::SVector{n})
+    SVector{n}(bvls(Matrix(A), Vector(b), Vector(l), Vector(u)))
+end

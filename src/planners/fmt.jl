@@ -2,12 +2,12 @@ export fmtstar!
 
 fmtstar!(P::MPProblem; kwargs...) = fmtstar!(P, length(P.V); kwargs...)
 function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = T(1),
-                                        connections::Symbol = :R,
-                                        k = min(ceil(Int, (2*rm)^dim(P.SS)*(e/dim(P.SS))*log(N)), N-1),
-                                        r = T(0),
-                                        ensure_goal_ct = 1,
-                                        init_idx = 1,
-                                        checkpts = true)  # TODO: bleh, prefer false
+                                              connections::Symbol = :R,
+                                              k = min(ceil(Int, (2*rm)^dim(P.SS)*(e/dim(P.SS))*log(N)), N-1),
+                                              r = T(0),
+                                              ensure_goal_ct = 1,
+                                              init_idx = 1,
+                                              checkpts = true)  # TODO: bleh, prefer false
     tic()
     P.CC.count = 0
 

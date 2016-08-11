@@ -1,41 +1,93 @@
-export Goal, RectangleGoal, BallGoal, PointGoal, StateGoal, is_goal_pt, sample_goal
+export Goal, RectangleGoal, BallGoal, ConvexHullWorkspaceGoal, ConvexHullStateSpaceGoal
+export PointGoal, StateGoal, is_goal_pt, sample_goal
 
 abstract Goal
 abstract WorkspaceGoal <: Goal
 abstract StateSpaceGoal <: Goal
 
 immutable RectangleGoal{N,T<:AbstractFloat} <: WorkspaceGoal
-    lo::Vec{N,T}
-    hi::Vec{N,T}
+    lo::SVector{N,T}
+    hi::SVector{N,T}
 end
-RectangleGoal(lo::Vector, hi::Vector) = RectangleGoal(Vec(lo), Vec(hi))
+RectangleGoal(lo::AbstractVector, hi::AbstractVector) = RectangleGoal(SVector(lo), SVector(hi))
 changeprecision{T<:AbstractFloat}(::Type{T}, G::RectangleGoal) = RectangleGoal(changeprecision(T, G.lo),
                                                                                changeprecision(T, G.hi))
 
 
 immutable BallGoal{N,T<:AbstractFloat} <: WorkspaceGoal
-    center::Vec{N,T}
+    center::SVector{N,T}
     radius::T
 end
-BallGoal(center::Vector, radius) = BallGoal(Vec(center), radius)
+BallGoal(center::AbstractVector, radius) = BallGoal(SVector(center), radius)
 changeprecision{T<:AbstractFloat}(::Type{T}, G::BallGoal) = BallGoal(changeprecision(T, G.center), T(radius))
 
-immutable PointGoal{N,T<:AbstractFloat} <: WorkspaceGoal
-    pt::Vec{N,T}
-end
-PointGoal(pt::Vector) = PointGoal(Vec(pt))
-changeprecision{T<:AbstractFloat}(::Type{T}, G::PointGoal) = PointGoal(changeprecision(T, G.pt))
+immutable ConvexHullWorkspaceGoal{N,T<:AbstractFloat} <: WorkspaceGoal
+    pts::Vector{SVector{N,T}}
+    A::Matrix{Float64}    # for use with the SCS LP solver
+    b::Vector{Float64}    # for use with the SCS LP solver
+    c::Vector{Float64}    # for use with the SCS LP solver
+    m::Int
+    n::Int
 
-immutable StateGoal{S<:State} <: StateSpaceGoal
-    st::S
+    function ConvexHullWorkspaceGoal(pts::Vector{SVector{N,T}})
+        m, n = N, length(pts)
+        A = n > 1 ? convert(Matrix{Float64}, [statevec2mat(pts); ones(1,n); -eye(n)]) : Array(Float64,0,0)
+        b = zeros(m + n + 1); b[m+1] = 1
+        c = zeros(n)
+        new(pts, A, b, c, m, n)
+    end
 end
-StateGoal(s::Vector) = StateGoal(Vec(s))
-changeprecision{T<:AbstractFloat}(::Type{T}, G::StateGoal) = StateGoal(changeprecision(T, G.st))
+ConvexHullWorkspaceGoal{N,T<:AbstractFloat}(pts::Vector{SVector{N,T}}) = ConvexHullWorkspaceGoal{N,T}(pts)
+ConvexHullWorkspaceGoal{V<:AbstractVector}(pts::Vector{V}) = ConvexHullWorkspaceGoal([SVector(p) for p in pts])
+PointGoal(pt::AbstractVector) = ConvexHullWorkspaceGoal([pt])
+changeprecision{T<:AbstractFloat}(::Type{T}, G::ConvexHullWorkspaceGoal) =
+    ConvexHullWorkspaceGoal(changeprecision(T, G.pts))
+
+immutable ConvexHullStateSpaceGoal{S<:State} <: StateSpaceGoal
+    sts::Vector{S}
+    A::Matrix{Float64}    # for use with the SCS LP solver
+    b::Vector{Float64}    # for use with the SCS LP solver
+    c::Vector{Float64}    # for use with the SCS LP solver
+    m::Int
+    n::Int
+
+    function ConvexHullStateSpaceGoal(sts::Vector{S})
+        m, n = length(sts[1]), length(sts)
+        A = n > 1 ? convert(Matrix{Float64}, [statevec2mat(sts); ones(1,n); -eye(n)]) : Array(Float64,0,0)
+        b = zeros(m + n + 1); b[m+1] = 1
+        c = zeros(n)
+        new(sts, A, b, c, m, n)
+    end
+end
+ConvexHullStateSpaceGoal{S<:State}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}(sts)
+ConvexHullStateSpaceGoal{S<:SVector}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}(sts)
+ConvexHullStateSpaceGoal{S<:FieldVector}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}(sts)
+ConvexHullStateSpaceGoal{V<:AbstractVector}(sts::Vector{V}) = ConvexHullStateSpaceGoal([SVector(s) for s in sts])
+StateGoal(s::AbstractVector) = ConvexHullStateSpaceGoal([s])
+changeprecision{T<:AbstractFloat}(::Type{T}, G::ConvexHullStateSpaceGoal) =
+    ConvexHullStateSpaceGoal(changeprecision(T, G.sts))
 
 plot(G::RectangleGoal, SS::StateSpace) = plot_rectangle(G.lo, G.hi, color = "green")
 plot(G::BallGoal, SS::StateSpace) = plot_circle(G.center, G.radius, color = "green")
-plot(G::PointGoal, SS::StateSpace) = plt.scatter(G.pt[1], G.pt[2], color = "green", zorder=5)
-plot(G::StateGoal, SS::StateSpace) = plt.scatter(state2workspace(G.st, SS)[1:2]..., color = "green", zorder=5)
+function plot(G::ConvexHullWorkspaceGoal, SS::StateSpace)
+    if G.n == 1    # PointGoal
+        plt.scatter(G.pts[1][1], G.pts[1][2], color = "green", zorder=5)
+    elseif G.n == 2
+        plot_line_segments([G.pts[1]], [G.pts[2]], color = "green", zorder=5, linewidth=2.5)
+    else
+        plot_polygon(G.pts, color = "green", zorder=5)
+    end
+end
+function plot(G::ConvexHullStateSpaceGoal, SS::StateSpace)
+    pts = [state2workspace(s, SS) for s in G.sts]
+    if G.n == 1    # StateGoal
+        plt.scatter(pts[1][1], pts[1][2], color = "green", zorder=5)
+    elseif G.n == 2
+        plot_line_segments([pts[1]], [pts[2]], color = "green", zorder=5, linewidth=2.5)
+    else
+        plot_polygon(pts, color = "green", zorder=5)
+    end
+end
 
 sample_goal(G::WorkspaceGoal, SS::StateSpace) = workspace2state(sample_goal(G), SS)
 sample_goal(G::StateSpaceGoal, SS::StateSpace) = sample_goal(G)
@@ -55,10 +107,35 @@ function sample_goal(G::BallGoal)
     end
 end
 
-## Point Goal
-is_goal_pt(v::State, G::PointGoal, SS::StateSpace) = (state2workspace(v, SS) == G.pt)
-sample_goal(G::PointGoal) = G.pt
+## Convex Hull Goals
+function is_goal_pt(v::State, G::ConvexHullWorkspaceGoal, SS::StateSpace)
+    pt = state2workspace(v, SS)
+    if G.n == 1
+        pt == G.pts[1]
+    elseif G.n == 2
+        isapprox(norm(G.pts[1] - G.pts[2]), norm(G.pts[1] - pt) + norm(G.pts[2] - pt))    # not the most efficient way
+    else
+        G.b[1:G.m] = pt
+        sol = SCS_solve(G.m+G.n+1, G.n, G.A, G.b, G.c, G.m+1, G.n, Int[], 0, Int[], 0, 0, 0, Float64[], 0, verbose=0)
+        sol.status != :Infeasible
+    end
+end
+function sample_goal{N,T}(G::ConvexHullWorkspaceGoal{N,T})
+    G.n == 1 ? G.pts[1] : G.n == 2 ? G.pts[1] + rand(T)*(G.pts[2] - G.pts[1]) : sum(G.pts .* rand(Dirichlet(G.n, T(1))))
+end
 
-## State Goal
-is_goal_pt(v::State, G::StateGoal, SS::StateSpace) = (v == G.st)
-sample_goal(G::StateGoal) = G.st
+function is_goal_pt(v::State, G::ConvexHullStateSpaceGoal, SS::StateSpace)
+    if G.n == 1
+        v == G.sts[1]
+    elseif G.n == 2
+        isapprox(norm(G.sts[1] - G.sts[2]), norm(G.sts[1] - v) + norm(G.sts[2] - v))    # not the most efficient way
+    else
+        G.b[1:G.m] = v
+        sol = SCS_solve(G.m+G.n+1, G.n, G.A, G.b, G.c, G.m+1, G.n, Int[], 0, Int[], 0, 0, 0, Float64[], 0, verbose=0)
+        sol.status != :Infeasible
+    end
+end
+function sample_goal{S}(G::ConvexHullStateSpaceGoal{S})
+    T = eltype(S)
+    G.n == 1 ? G.sts[1] : G.n == 2 ? G.sts[1] + rand(T)*(G.sts[2] - G.sts[1]) : sum(G.sts .* rand(Dirichlet(G.n, T(1))))
+end

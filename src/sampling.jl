@@ -20,7 +20,7 @@ function sample_free!(P::MPProblem, N::Integer, ensure_goal::Bool = true; goal_b
     end
     attempts = 0
     successes = 0
-    for v in repeatedly(() -> sample_space(P.SS))
+    for v in repeatedly(() -> sample_space(P.SS)) # TODO: batch sampling; even pre-allocated perhaps
         attempts += 1
         if is_free_state(v, P.CC, P.SS)
             sample_count += 1

@@ -1,8 +1,11 @@
 julia 0.5-
+Reexport
+StaticArrays
+Distances
 PyPlot
+Distributions
+SCS
 Devectorize
 Iterators
-Distances
 NearestNeighbors
-FixedSizeArrays
 SymPy

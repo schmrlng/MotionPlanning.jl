@@ -2,12 +2,15 @@
 
 module MotionPlanning
 
+using Reexport
+@reexport using StaticArrays
+@reexport using Distances
 import PyPlot; const plt = PyPlot
+using Distributions; import Base.eltype; eltype{T}(::Dirichlet{T}) = T    # TODO: submit Distributions PR
+using SCS
 using Devectorize
 using Iterators
-using Distances
 using NearestNeighbors
-using FixedSizeArrays
 
 ### Includes
 include("primitivetypes.jl")

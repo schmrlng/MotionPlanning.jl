@@ -125,7 +125,7 @@ for direction in ("", "F", "B")
     inballD! = Symbol(:inball, direction, "!")
     cacheD = Symbol(:cache, direction)
     DSD = Symbol(:DS, direction)
-    @eval $inballD!{M,S,N<:ImmutableNNC}(NN::$NNsym{M,S,N}, v::Int, r) = subcol(NN.$cacheD.D, v)
+    @eval $inballD!{M,S,N<:ImmutableNNC}(NN::$NNsym{M,S,N}, v::Int, r) = viewcol(NN.$cacheD.D, v)
     @eval function $inballD!{M,S,N<:MutableNNC}(NN::$NNsym{M,S,N}, v::Int, r)
         if !isdefined(NN.$cacheD.D, v)
             NN.$cacheD.D[v] = inball(NN.V, NN.dist, NN.$DSD, v, r, $(direction != "B"))
@@ -151,7 +151,7 @@ function inball{A<:Matrix}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v
 end
 
 function inball{A<:SparseMatrixCSC}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
-    vcol = subcol(DS.Dmat, v)
+    vcol = viewcol(DS.Dmat, v)
     inds, ds = nonzeroinds(vcol), nonzeros(vcol)
     @devec nn_bool = ds .<= r
     SparseVector(length(V), inds[nn_bool], ds[nn_bool])
@@ -166,13 +166,7 @@ end
 function inball{S}(V::Vector{S}, dist::ChoppedPreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
     inds = inrange(DS.tree, V[v], r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
-    if S <: Vec
-        ds = forwards ? colwise(dist, V[v], DS.tree.data[:,inds]) : colwise(dist, DS.tree.data[:,inds], V[v])
-    elseif S <: SE2State
-        ds = forwards ? colwise(dist, V[v], V[inds]) : colwise(dist, V[inds], V[v])
-    else
-        error("TODO: any other state types?")
-    end
+    ds = forwards ? colwise(dist, V[v], V[inds]) : colwise(dist, V[inds], V[v])
     @devec nn_bool = ds .<= r
     SparseVector(length(V), inds[nn_bool], ds[nn_bool])
 end

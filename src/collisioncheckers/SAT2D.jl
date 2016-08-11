@@ -5,36 +5,36 @@ export colliding, colliding_ends_free, closest, closeR
 # ---------- Shape Definitions ----------
 
 abstract Shape2D{T<:AbstractFloat}
-typealias AnyVec2{T} Union{AbstractVector{T}, Vec{2,T}, Tuple{T,T}}
+typealias AnyVec2{T} Union{AbstractVector{T}, Tuple{T,T}}
 eltype{T<:AbstractFloat}(::Type{Shape2D{T}}) = T
 eltype{T<:Shape2D}(::Type{T}) = eltype(super(T))
 
 immutable Circle{T} <: Shape2D{T}
-    c::Vec{2,T}
+    c::SVector{2,T}
     r::T
-    xrange::Vec{2,T}
-    yrange::Vec{2,T}
+    xrange::SVector{2,T}
+    yrange::SVector{2,T}
 
-    function Circle(c::Vec{2,T}, r::T, xrange::Vec{2,T}, yrange::Vec{2,T})
+    function Circle(c::SVector{2,T}, r::T, xrange::SVector{2,T}, yrange::SVector{2,T})
         r <= 0 && error("Radius must be positive")
         new(c, r, xrange, yrange)
     end
 end
-Circle(c::AnyVec2, r) = Circle{eltype(c)}(Vec(c[1], c[2]), r,
-                                          Vec(c[1]-r, c[1]+r),
-                                          Vec(c[2]-r, c[2]+r))
-projectNextrema(C::Circle, n::Vec{2}) = (d = dot(C.c,n); Vec(d-C.r, d+C.r))
+Circle(c::AnyVec2, r) = Circle{eltype(c)}(SVector(c[1], c[2]), r,
+                                          SVector(c[1]-r, c[1]+r),
+                                          SVector(c[2]-r, c[2]+r))
+projectNextrema(C::Circle, n::SVector{2}) = (d = dot(C.c,n); SVector(d-C.r, d+C.r))
 changeprecision{T<:AbstractFloat}(::Type{T}, C::Circle) = Circle(changeprecision(T, C.c), T(C.r))
 
 immutable Polygon{T} <: Shape2D{T}
-    points::Vector{Vec{2,T}}
-    edges::Vector{Vec{2,T}}
-    normals::Vector{Vec{2,T}}
-    xrange::Vec{2,T}
-    yrange::Vec{2,T}
-    nextrema::Vector{Vec{2,T}}
+    points::Vector{SVector{2,T}}
+    edges::Vector{SVector{2,T}}
+    normals::Vector{SVector{2,T}}
+    xrange::SVector{2,T}
+    yrange::SVector{2,T}
+    nextrema::Vector{SVector{2,T}}
 
-    function Polygon(points::Vector{Vec{2,T}})
+    function Polygon(points::Vector{SVector{2,T}})
         N = length(points)
         N < 3 && error("Polygons need at least 3 points! Try Line?")
         if sum([(points[wrap1(i+1,N)][1] - points[i][1])*(points[wrap1(i+1,N)][2] + points[i][2]) for i in 1:N]) > 0
@@ -43,30 +43,30 @@ immutable Polygon{T} <: Shape2D{T}
         edges = [points[wrap1(i+1,N)] - points[i] for i in 1:N]
         normals = [normalize(perp(g)) for g in edges]
         any(-pi .<= diff([T[atan2(n) for n in normals]; atan2(normals[1])]) .<= 0) && error("Polygon must be convex")
-        xrange = Vec(extrema([points[i][1] for i in 1:N]))
-        yrange = Vec(extrema([points[i][2] for i in 1:N]))
+        xrange = SVector(extrema([points[i][1] for i in 1:N]))
+        yrange = SVector(extrema([points[i][2] for i in 1:N]))
         nextrema = [projectNextrema(points, normals[i]) for i in 1:N]
         new(points, edges, normals, xrange, yrange, nextrema)
     end
 end
-Polygon{T<:AnyVec2}(points::Vector{T}) = Polygon{eltype(T)}(Vec{2,eltype(T)}[Vec(p[1],p[2]) for p in points])
-Box2D(xr::AnyVec2, yr::AnyVec2) = Polygon([Vec(xr[1], yr[1]),
-                                           Vec(xr[2], yr[1]),
-                                           Vec(xr[2], yr[2]),
-                                           Vec(xr[1], yr[2])])
-projectNextrema(P::Polygon, n::Vec{2}) = projectNextrema(P.points, n)
+Polygon{T<:AnyVec2}(points::Vector{T}) = Polygon{eltype(T)}(SVector{2,eltype(T)}[SVector(p[1],p[2]) for p in points])
+Box2D(xr::AnyVec2, yr::AnyVec2) = Polygon([SVector(xr[1], yr[1]),
+                                           SVector(xr[2], yr[1]),
+                                           SVector(xr[2], yr[2]),
+                                           SVector(xr[1], yr[2])])
+projectNextrema(P::Polygon, n::SVector{2}) = projectNextrema(P.points, n)
 changeprecision{T<:AbstractFloat}(::Type{T}, P::Polygon) = Polygon(changeprecision(T, P.points))
 
 immutable Line{T} <: Shape2D{T}   # special case of Polygon; only 1 edge/normal
-    v::Vec{2,T}
-    w::Vec{2,T}
-    edge::Vec{2,T}
-    normal::Vec{2,T}
-    xrange::Vec{2,T}
-    yrange::Vec{2,T}
+    v::SVector{2,T}
+    w::SVector{2,T}
+    edge::SVector{2,T}
+    normal::SVector{2,T}
+    xrange::SVector{2,T}
+    yrange::SVector{2,T}
     ndotv::T
 
-    function Line(v::Vec{2,T}, w::Vec{2,T})
+    function Line(v::SVector{2,T}, w::SVector{2,T})
         edge = w - v
         normal = perp(edge)     # notably not normalized, for speed; can't be used for Circle SAT
         xrange = minmaxV(v[1],w[1])
@@ -75,23 +75,23 @@ immutable Line{T} <: Shape2D{T}   # special case of Polygon; only 1 edge/normal
         new(v, w, edge, normal, xrange, yrange, ndotv)
     end
 end
-Line(v::AnyVec2, w::AnyVec2) = Line{eltype(v)}(Vec(v[1],v[2]), Vec(w[1],w[2]))
-projectNextrema(L::Line, n::Vec{2}) = minmaxV(dot(L.v,n), dot(L.w,n))
+Line(v::AnyVec2, w::AnyVec2) = Line{eltype(v)}(SVector(v[1],v[2]), SVector(w[1],w[2]))
+projectNextrema(L::Line, n::SVector{2}) = minmaxV(dot(L.v,n), dot(L.w,n))
 changeprecision{T<:AbstractFloat}(::Type{T}, L::Line) = Line(changeprecision(T, L.v), changeprecision(T, L.w))
 
 immutable Compound2D{T} <: Shape2D{T}
     parts::Vector{Shape2D{T}}
-    xrange::Vec{2,T}
-    yrange::Vec{2,T}
+    xrange::SVector{2,T}
+    yrange::SVector{2,T}
 end
 function Compound2D{S<:Shape2D}(parts::Vector{S})
     T = eltype(S)
-    isempty(parts) && return Compound2D{T}(Shape2D{T}[], zero(Vec{2,T}), zero(Vec{2,T}))
+    isempty(parts) && return Compound2D{T}(Shape2D{T}[], zeros(SVector{2,T}), zeros(SVector{2,T}))
     Compound2D(parts...)
 end
 function Compound2D{T}(parts::Shape2D{T}...)
-    xrange = Vec(minimum([P.xrange[1] for P in parts]), maximum([P.xrange[2] for P in parts]))
-    yrange = Vec(minimum([P.yrange[1] for P in parts]), maximum([P.yrange[2] for P in parts]))
+    xrange = SVector(minimum([P.xrange[1] for P in parts]), maximum([P.xrange[2] for P in parts]))
+    yrange = SVector(minimum([P.yrange[1] for P in parts]), maximum([P.yrange[2] for P in parts]))
     Compound2D{T}(Shape2D{T}[parts...], xrange, yrange)
 end
 changeprecision{T<:AbstractFloat}(::Type{T}, C::Compound2D) =
@@ -108,7 +108,8 @@ typealias Basic2D{T} Union{Circle{T}, Polygon{T}}    # TODO: Figure out why I ha
 
 # ---------- Separating Axis ----------
 
-is_separating_axis(S1::Shape2D, S2::Shape2D, ax::Vec{2}) = !overlapping(projectNextrema(S1,ax), projectNextrema(S2,ax))
+is_separating_axis(S1::Shape2D, S2::Shape2D, ax::SVector{2}) =
+    !overlapping(projectNextrema(S1,ax), projectNextrema(S2,ax))
 is_separating_axis(P::Polygon, S::Shape2D, i::Integer) = !overlapping(P.nextrema[i], projectNextrema(S, P.normals[i]))
 is_separating_axis(L::Line, P::Polygon) = !ininterval(L.ndotv, projectNextrema(P, L.normal))
 
@@ -116,20 +117,20 @@ is_separating_axis(L::Line, P::Polygon) = !ininterval(L.ndotv, projectNextrema(P
 
 ## Broadphase
 AABBseparated(S1::Shape2D, S2::Shape2D) = !(overlapping(S1.xrange, S2.xrange) && overlapping(S1.yrange, S2.yrange))
-pointinAABB(p::Vec{2}, S::Shape2D) = ininterval(p[1], S.xrange) && ininterval(p[2], S.yrange)
+pointinAABB(p::AbstractVector, S::Shape2D) = ininterval(p[1], S.xrange) && ininterval(p[2], S.yrange)
 ## Point collision
-colliding(p::Vec{2}, C::Circle) = norm2(p - C.c) <= C.r^2
-colliding(C::Circle, p::Vec{2}) = norm2(p - C.c) <= C.r^2
-function colliding(p::Vec{2}, P::Polygon)
+colliding(p::AbstractVector, C::Circle) = norm2(p - C.c) <= C.r^2
+colliding(C::Circle, p::AbstractVector) = norm2(p - C.c) <= C.r^2
+function colliding(p::AbstractVector, P::Polygon)
     !pointinAABB(p,P) && return false
     @all [!ininterval(dot(p, P.normals[i]), P.nextrema[i]) for i in 1:length(P.normals)]
 end
-colliding(P::Polygon, p::Vec{2}) = colliding(p,P)
-function colliding(p::Vec{2}, C::Compound2D)
+colliding(P::Polygon, p::AbstractVector) = colliding(p,P)
+function colliding(p::AbstractVector, C::Compound2D)
     !pointinAABB(p,C) && return false
     @any [colliding(p,P) for P in C.parts]
 end
-colliding(C::Compound2D, p::Vec{2}) = colliding(p,C)
+colliding(C::Compound2D, p::AbstractVector) = colliding(p,C)
 ## Shape collision
 colliding(C1::Circle, C2::Circle) = norm2(C1.c - C2.c) <= (C1.r + C2.r)^2
 function colliding(C::Circle, P::Polygon)
@@ -185,34 +186,34 @@ colliding_ends_free(C::Compound2D, L::Line) = colliding(C,L)
 
 # ---------- Transformations ----------
 
-inflate{T}(C::Circle{T}, eps; roundcorners = true) = Circle(C.c, C.r + T(eps))
-function inflate{T}(P::Polygon{T}, eps; roundcorners = true)
+inflate{T}(C::Circle{T}, ε; roundcorners = true) = Circle(C.c, C.r + T(ε))
+function inflate{T}(P::Polygon{T}, ε; roundcorners = true)
     push_out_corner_vector(n0, n1) = (abs(cross(n0, n1)) < T(1e-6) ? n0 : (perp(n1) - perp(n0)) / cross(n0, n1))
-    eps = T(eps)
+    ε = T(ε)
     N = length(P.points)
     S = eltype(P.points)
     if !roundcorners
-        return Polygon(S[P.points[i] + eps*push_out_corner_vector(P.normals[wrap1(i-1,N)], P.normals[i]) for i in 1:N])
+        return Polygon(S[P.points[i] + ε*push_out_corner_vector(P.normals[wrap1(i-1,N)], P.normals[i]) for i in 1:N])
     end
     Compound2D(
-        Polygon(vcat([S[P.points[i] + eps*P.normals[wrap1(i-1,N)], P.points[i] + eps*P.normals[i]] for i in 1:N]...)),
-        [Circle(p, eps) for p in P.points]...
+        Polygon(vcat([S[P.points[i] + ε*P.normals[wrap1(i-1,N)], P.points[i] + ε*P.normals[i]] for i in 1:N]...)),
+        [Circle(p, ε) for p in P.points]...
     )
 end
-inflate{T}(C::Compound2D{T}, eps; roundcorners = true) =
-    Compound2D(Shape2D{T}[inflate(P, T(eps); roundcorners = roundcorners) for P in C.parts])
+inflate{T}(C::Compound2D{T}, ε; roundcorners = true) =
+    Compound2D(Shape2D{T}[inflate(P, T(ε), roundcorners=roundcorners) for P in C.parts])
 
 # ---------- Closest Point ---------
 
-@unfix function closest(p::Vec{2}, C::Circle)
+function closest(p::AbstractVector, C::Circle)
     xmin = C.c + C.r*normalize(p - C.c)
     norm2(p-xmin), xmin
 end
-@unfix closest(p::Vec{2}, C::Circle, W::Mat{2,2}) = closest(p, C, eigfact(dense(W)))
-@unfix function closest{T}(p::Vec{2,T}, C::Circle{T}, EF::Base.Eigen)
+closest(p::AbstractVector, C::Circle, W::AbstractMatrix) = closest(p, C, eigfact(W))
+function closest{T}(p::AbstractVector, C::Circle{T}, EF::Base.Eigen)
     ctop = p - C.c
-    v1 = Vec(EF[:vectors][1:2,1])
-    v2 = Vec(EF[:vectors][1:2,2])
+    v1 = SVector{2,T}(EF[:vectors][1:2,1])
+    v2 = SVector{2,T}(EF[:vectors][1:2,2])
     p1 = dot(v1, ctop)
     p2 = dot(v2, ctop)
     s1, s2 = EF[:values]
@@ -235,8 +236,8 @@ end
     xmin = C.c + v1*p1*s1/(lambda+s1) + v2*p2*s2/(lambda+s2)
     s1*(p1-p1*s1/(lambda+s1))^2 + s2*(p2-p2*s2/(lambda+s2))^2, xmin
 end
-@unfix closest(p::Vec{2}, P::Polygon) = closest_polypts(p, P.points)
-@unfix function closest_polypts{T}(p::Vec{2,T}, points::Vector{Vec{2,T}})
+closest(p::AbstractVector, P::Polygon) = closest_polypts(p, P.points)
+function closest_polypts{T}(p::AbstractVector, points::Vector{SVector{2,T}})
     N = length(points)
     d2min, vmin = T(Inf), points[1]
     for i in 1:N
@@ -250,13 +251,13 @@ end
     end
     d2min, vmin
 end
-@unfix function closest(p::Vec{2}, P::Polygon, W::Mat{2,2})
-    L = Mat(full(chol(dense(W))))
+function closest(p::AbstractVector, P::Polygon, W::AbstractMatrix)
+    L = SMatrix{2,2}(chol(W))
     xmin = inv(L)*closest_polypts(L*p, eltype(P.points)[L*pt for pt in P.points])[2]
     dot(xmin-p, W*(xmin-p)), xmin
 end
-@unfix function closest{T}(p::Vec{2,T}, C::Compound2D{T})
-    d2min, vmin = T(Inf), p
+function closest{T}(p::AbstractVector, C::Compound2D{T})
+    d2min, vmin = T(Inf), zeros(SVector{2,T})
     for P in C.parts
         d2, v = closest(p, P)
         if d2 < d2min
@@ -265,8 +266,8 @@ end
     end
     d2min, vmin
 end
-@unfix function closest{T}(p::Vec{2,T}, C::Compound2D{T}, W::Mat{2,2,T})  # TODO: macro, iterator, or v0.5 generator
-    d2min, vmin = T(Inf), p
+function closest{T}(p::AbstractVector, C::Compound2D{T}, W::AbstractMatrix)  # TODO: macro, iterator, or v0.5 generator
+    d2min, vmin = T(Inf), zeros(SVector{2,T})
     for P in C.parts
         d2, v = closest(p, P, W)
         if d2 < d2min
@@ -276,11 +277,11 @@ end
     d2min, vmin
 end
 
-@unfix function closeR(p::Vec{2}, P::Basic2D, W::Mat{2,2}, r2)  # pretty janky
+function closeR(p::AbstractVector, P::Basic2D, W::AbstractMatrix, r2)  # pretty janky
     cplist = [closest(p, P, W)]
     cplist[1][1] < r2 ? cplist[1:1] : cplist[1:0]
 end
-@unfix closeR(p::Vec{2}, C::Compound2D, W::Mat{2,2}, r2) =
+closeR(p::AbstractVector, C::Compound2D, W::AbstractMatrix, r2) =
     sort!(vcat([closeR(p, P, W, r2) for P in C.parts]...), by=first)
 
 # ---------- Plotting ----------
