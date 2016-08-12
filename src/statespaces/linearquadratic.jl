@@ -39,7 +39,7 @@ changeprecision{T<:AbstractFloat}(::Type{T}, d::LinearQuadratic) =
 ### QuasiMetric Space Instantiation
 function LinearQuadraticQuasiMetricSpace(lo::AbstractVector, hi::AbstractVector,
                                          A::Matrix, B::Matrix, c::Vector, R::Matrix, C::Matrix)
-    RealVectorStateSpace(SVector(lo), SVector(hi), LinearQuadratic(A, B, c, R), OutputMatrix(C))
+    BoundedStateSpace(SVector(lo), SVector(hi), LinearQuadratic(A, B, c, R), OutputMatrix(C))
 end
 function DoubleIntegrator(d::Int, lo = zeros(d), hi = ones(d); vmax = 1.5, r = 1.)
     A = [zeros(d,d) eye(d); zeros(d,2d)]

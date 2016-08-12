@@ -55,8 +55,8 @@ changeprecision{T<:AbstractFloat,S<:Real}(::Type{T}, ::Type{SE2State{S}}) = SE2S
 ### StateSpace Typedefs
 export StateSpace, State2Workspace
 
-"The `supertype` for all state spaces; the type parameter indicates numerical precision."
-abstract StateSpace{T<:AbstractFloat}
+"The `supertype` for all state spaces; the type parameter is the state type."
+abstract StateSpace{S<:State}
 "Encodes a transformation from the state space (dynamics) to the workspace (obstacles)."
 abstract State2Workspace
 

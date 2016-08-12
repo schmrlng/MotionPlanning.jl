@@ -1,4 +1,4 @@
-export RealVectorStateSpace, SE2StateSpace
+export BoundedStateSpace
 export Identity, VectorView, OutputMatrix
 export sample_space, state2workspace, volume, dim
 export steering_control, propagate, collision_waypoints, waypoints, plot_waypoints
@@ -26,35 +26,20 @@ In rare circumstances, the user might need to specify:
 ==================================================================#
 
 ### State Space Definitions
-immutable RealVectorStateSpace{N, T, M<:PreMetric, W<:State2Workspace} <: StateSpace{T}
-    lo::SVector{N,T}
-    hi::SVector{N,T}
+immutable BoundedStateSpace{S<:State,M<:PreMetric,W<:State2Workspace} <: StateSpace{S}
+    lo::S
+    hi::S
     dist::M
     s2w::W
 end
-
-immutable SE2StateSpace{T, M<:PreMetric, W<:State2Workspace} <: StateSpace{T}
-    lo::SVector{2,T}    # workspace only; 0 <= theta <= 2pi is assumed
-    hi::SVector{2,T}
-    dist::M
-    s2w::W
-end
-
-### Utilities
-changeprecision{T<:AbstractFloat}(::Type{T}, SS::RealVectorStateSpace) =
-    RealVectorStateSpace(map(x -> changeprecision(T,x), (SS.lo, SS.hi, SS.dist, SS.s2w))...)
-changeprecision{T<:AbstractFloat}(::Type{T}, SS::SE2StateSpace) =
-    SE2StateSpace(map(x -> changeprecision(T,x), (SS.lo, SS.hi, SS.dist, SS.s2w))...)
+changeprecision{T<:AbstractFloat}(::Type{T}, SS::BoundedStateSpace) =
+    BoundedStateSpace(map(x -> changeprecision(T,x), (SS.lo, SS.hi, SS.dist, SS.s2w))...)
 changeprecision{T<:AbstractFloat}(::Type{T}, s2w::State2Workspace) = s2w
 
 ### Sampling
-sample_space(SS::RealVectorStateSpace) = (SS.lo + rand(typeof(SS.lo)).*(SS.hi-SS.lo))
-sample_space{T,M,W}(SS::SE2StateSpace{T,M,W}) = SE2State(SS.lo[1] + rand(T)*(SS.hi[1]-SS.lo[1]),
-                                                         SS.lo[2] + rand(T)*(SS.hi[2]-SS.lo[2]),
-                                                         2*T(pi)*rand(T))
-volume(SS::StateSpace) = prod(SS.hi-SS.lo)    # TODO: only makes sense for a Euclidean metric
-dim{N}(SS::RealVectorStateSpace{N}) = N       # TODO: this should really be a function of the metric dist
-dim(SS::SE2StateSpace) = 3
+sample_space(SS::BoundedStateSpace) = (SS.lo + rand(typeof(SS.lo)).*(SS.hi-SS.lo))
+volume(SS::BoundedStateSpace) = prod(SS.hi-SS.lo)    # TODO: only makes sense for a Euclidean metric
+dim{S}(SS::BoundedStateSpace{S}) = length(S)         # TODO: this should really be a function of the metric dist
 
 ### State2Workspace (configuration space -> collision checking workspace)
 immutable Identity <: State2Workspace end
@@ -150,7 +135,6 @@ steering_control(SS::StateSpace, V::State...) = vcat([steering_control(SS.dist,V
 
 ### Validity Checking
 in_state_space(v::AbstractVector, SS::StateSpace) = @all [SS.lo[i] <= v[i] <= SS.hi[i] for i in 1:length(v)]
-in_state_space(v::SE2State, SS::SE2StateSpace) = (SS.lo[1] < v.x < SS.hi[1] && SS.lo[2] < v.y < SS.hi[2])
 is_free_state(v::State, CC::CollisionChecker, SS::StateSpace) =
     in_state_space(v, SS) && is_free_state(state2workspace(v, SS), CC)
 function is_free_motion(v::State, w::State, CC::CollisionChecker, SS::StateSpace)

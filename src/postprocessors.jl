@@ -39,8 +39,8 @@ function adaptive_shortcut(path::Path, CC::CollisionChecker, iterations::Int = 1
 end
 
 function adaptive_shortcut!(P::MPProblem, iterations::Int = 10)
-    P.status != :solved && error("Cannot post-process unsolved problem! (adaptive-shortcut)")
-    (!isa(P.SS, RealVectorStateSpace) || P.SS.dist != Euclidean()) && error("Adaptive-shortcut requires Euclidean SS")
+    P.status == :solved || error("Cannot post-process unsolved problem! (adaptive-shortcut)")
+    isa(P.SS.dist, Euclidean) || error("Adaptive-shortcut requires Euclidean SS")
     S = P.solution
     smoothed_path, smoothed_cumcost = adaptive_shortcut(P.V.V[S.metadata["path"]], P.CC, iterations)
     S.metadata["smoothed_path"] = smoothed_path
@@ -53,64 +53,13 @@ end
 
 function smooth_solution!(P::MPProblem)
     P.status != :solved && error("Cannot post-process unsolved problem! (adaptive-shortcut)")
-    isa(P.SS, RealVectorStateSpace) && isa(P.SS.dist, Euclidean) && return adaptive_shortcut!(P)
-    # isa(P.SS, SE2StateSpace) && isa(P.SS.dist, SimpleCarMetric) && return 
+    isa(P.SS.dist, Euclidean) && return adaptive_shortcut!(P)
 end
 
+### Path discretization
 
-### Path discretization (Euclidean)
-
-# function discretize_path(path0::Path, dx)
-#     path = path0[1:1]
-#     for i in 2:length(path0)
-#          norm(path0[i] - path[end]) > 2dx/3 && push!(path, path0[i])  # cut out small waypoint steps
-#     end
-#     dpath = path[1:1]
-#     for i in 2:length(path)
-#         segment_length = norm(path[i] - path[i-1])
-#         M = ceil(segment_length / dx)
-#         append!(dpath, [path[i-1] + (j/M)*(path[i] - path[i-1]) for j in 1:M])
-#     end
-#     map(dense, dpath)
-# end
-
-### Reeds-Shepp fix inexact steering (okay not really) and discretize
-
-# function smooth_waypoints{T}(v::RSState{T}, s::RSSegment{T}, r::T, dx)
-#     s.t == 0 && return Vector2{T}[v.x + a*Vector2(cos(v.t), sin(v.t)) for a in linspace(0, abs(s.d), iceil(abs(s.d)/dx)+1)]
-#     center = v.x + sign(s.t)*Vector2(-r*sin(v.t), r*cos(v.t))
-#     turnpts = [r*Vector2(cos(x), sin(x)) for x in linspace(0, abs(s.d), iceil(r*abs(s.d)/dx)+1)]
-#     if s.t*s.d < 0
-#         for i in 1:length(turnpts)      # manual @devec
-#             turnpts[i] = Vector2(turnpts[i][1], -turnpts[i][2])
-#         end
-#     end
-#     [(center + sign(s.t)*rotate(p, v.t-pi/2)) for p in turnpts]
-# end
-# function smooth_waypoints{T}(v::RSState{T}, w::RSState{T}, SS::ReedsSheppStateSpace, dx)
-#     pts = Array(Vector2{T}, 0)
-#     for s in SS.dist.paths[RSvec2sub(v, w, SS.dist)...]
-#         s_pts = smooth_waypoints(v, s, SS.r, dx)
-#         append!(pts, s_pts[1:end-1])
-#         v = RSState(s_pts[end], v.t + s.t*s.d)
-#     end
-#     scale_factor = (w.x - pts[1]) ./ (v.x - pts[1])
-#     pts = [(scale_factor.*(p - pts[1]) + pts[1]) for p in pts]
-#     push!(pts, w.x)
-# end
-# smooth_waypoints(i::Int, j::Int, NN::NearNeighborCache, SS::ReedsSheppStateSpace, dx) = smooth_waypoints(NN[i], NN[j], SS, dx)
-
-# function RSsmooth_and_discretize!(P::MPProblem, dx)
-#     (!isa(P.SS, ReedsSheppStateSpace) || P.status != :solved) && error("RSsmooth_and_discretize only works for solved Reeds-Shepp problems!")
-#     sol = P.solution.metadata["path"]
-#     dpath = vcat([smooth_waypoints(sol[i], sol[i+1], P.V, P.SS, dx)[1:end-1] for i in 1:length(sol)-1]...)
-#     push!(dpath, P.V[sol[end]].x)
-#     dpath = dpath[[true, map(norm, diff(dpath)) .> dx / 4]] # cut out tiny waypoint steps
-#     P.solution.metadata["smoothed_path"] = dpath
-# end
-
-function time_discretize_solution!(P::MPProblem, dt)
-    if haskey(P.solution.metadata, "smoothed_path")
+function time_discretize_solution!(P::MPProblem, dt::Real, usesmoothed = true)
+    if usesmoothed && haskey(P.solution.metadata, "smoothed_path")
         path = P.solution.metadata["smoothed_path"]
         costs = P.solution.metadata["smoothed_cumcost"]
     else
@@ -121,8 +70,8 @@ function time_discretize_solution!(P::MPProblem, dt)
     P.solution.metadata["discretized_path"] = propagate(P.SS, path[1], controlseq, 0:dt:duration(controlseq))
 end
 
-function time_space_solution!(P::MPProblem, n)
-    if haskey(P.solution.metadata, "smoothed_path")
+function time_space_solution!(P::MPProblem, n::Integer, usesmoothed = true)
+    if usesmoothed && haskey(P.solution.metadata, "smoothed_path")
         path = P.solution.metadata["smoothed_path"]
         costs = P.solution.metadata["smoothed_cumcost"]
     else
@@ -132,61 +81,3 @@ function time_space_solution!(P::MPProblem, n)
     controlseq = steering_control(P.SS, path...)
     P.solution.metadata["discretized_path"] = propagate(P.SS, path[1], controlseq, linspace(0., duration(controlseq), n))
 end
-
-# function cost_discretize_solution!(P::MPProblem, dc)  # TODO: write time_discretize_solution! after standardizing StateSpace definitions
-#     if haskey(P.solution.metadata, "smoothed_path")
-#         path = P.solution.metadata["smoothed_path"]
-#         costs = P.solution.metadata["smoothed_cumcost"]
-#     else
-#         path = P.V[P.solution.metadata["path"]]
-#         costs = P.solution.metadata["cumcost"]
-#     end
-#     x0 = path[1]
-#     dpath = typeof(x0)[x0]
-#     c = dc
-#     for i in 1:length(path)-1
-#         while c < costs[i+1]
-#             push!(dpath, cost_waypoint(P.SS, path[i], path[i+1], c - costs[i]))
-#             c = c + dc
-#         end
-#     end
-#     push!(dpath, path[end])
-#     P.solution.metadata["discretized_path"] = dpath
-# end
-
-# function cost_space_solution!(P::MPProblem, n)
-#     for k in n-1:n+10
-#         cost_discretize_solution!(P, P.solution.cost / k)
-#         if length(P.solution.metadata["discretized_path"]) >= n
-#             P.solution.metadata["discretized_path"] = P.solution.metadata["discretized_path"][1:n]
-#             return P.solution.metadata["discretized_path"]
-#         end
-#     end
-#     error("Something must be seriously wrong with costs to get here...")
-# end
-
-# time_discretize_solution!(P::MPProblem, dt) = cost_discretize_solution!(P::MPProblem, dt) # TODO: TEMP
-
-### Linear Quadratic Discretization
-
-# function discretize_path(pidx, dt, NN::NearNeighborCache, SS::LinearQuadraticStateSpace)
-#     dpath = NN.V[[pidx[1]]]
-#     for i in 2:length(pidx)
-#         segment_length = NN.US[pidx[i-1],pidx[i]].t
-#         M = iceil(segment_length / dt) + 1
-#         wps = statepoints(pidx[i-1], pidx[i], NN, SS, M)
-#         append!(dpath, wps[2:end])
-#     end
-#     dpath
-# end
-
-### General (should perhaps not live in this package?)
-
-# function discretize_path(P::MPProblem, dt)
-#     if P.SS.dist == Euclidean()
-#         adaptive_shortcut!(P)
-#         P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["smoothed_path"], dt)
-#         return P.solution.metadata["discretized_path"]   # TODO: get method for MPSolution type
-#     end
-#     P.solution.metadata["discretized_path"] = discretize_path(P.solution.metadata["path"], dt, P.V, P.SS)
-# end

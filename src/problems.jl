@@ -31,14 +31,8 @@ end
 changeprecision{T<:AbstractFloat}(::Type{T}, P::MPProblem) =
     MPProblem(map(x -> changeprecision(T,x), (P.SS, P.init, P.goal, P.CC))...)  # TODO: changeprecision for `SampleSet`s
 
-function MPProblem{T}(SS::StateSpace{T}, init::State, goal::Goal, CC::CollisionChecker)
-    if isa(SS, RealVectorStateSpace)
-        init = SVector(init)
-    elseif isa(SS, SE2StateSpace)
-        init = SE2State(init)
-    end
-    MPProblem{T}(SS, init, goal, CC, defaultNN(SS, init))
-end
+MPProblem{S}(SS::StateSpace{S}, init::State, goal::Goal, CC::CollisionChecker) =
+    MPProblem{eltype(S)}(SS, S(init), goal, CC, defaultNN(SS, S(init)))
 function copy(P::MPProblem)
     Pcopy = MPProblem(P.SS, P.init, P.goal, P.CC, P.V, P.config_name)
     Pcopy.status = P.status

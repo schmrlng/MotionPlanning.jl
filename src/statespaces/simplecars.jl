@@ -24,10 +24,16 @@ changeprecision{T<:AbstractFloat}(::Type{T}, dist::ReedsSheppExact) = ReedsShepp
 changeprecision{T<:AbstractFloat}(::Type{T}, dist::DubinsExact) = DubinsExact(T(dist.r))
 
 ## (Quasi)Metric Space Instantiation
-ReedsSheppMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T})) =
-    SE2StateSpace(SVector(lo), SVector(hi), ChoppedMetric(ReedsSheppExact(r), Euclidean(), T(Inf)), VectorView(1:2))
-DubinsQuasiMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T})) =
-    SE2StateSpace(SVector(lo), SVector(hi), ChoppedQuasiMetric(DubinsExact(r), Euclidean(), T(Inf)), VectorView(1:2))
+function ReedsSheppMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T}))
+    BoundedStateSpace(SE2State([lo; T(0)]), SE2State([hi; 2*T(pi)]),
+                      ChoppedMetric(ReedsSheppExact(r), Euclidean(), T(Inf)),
+                      VectorView(1:2))
+end
+function DubinsQuasiMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T}))
+    BoundedStateSpace(SE2State([lo; T(0)]), SE2State([hi; 2*T(pi)]),
+                      ChoppedQuasiMetric(DubinsExact(r), Euclidean(), T(Inf)),
+                      VectorView(1:2))
+end
 
 function helper_data_structures{S<:SE2State,R<:ReedsSheppExact}(V::Vector{S}, M::ChoppedMetric{R})
     TreeDistanceDS(KDTree(statevec2mat(V)[1:2,:], M.lowerbound; reorder=false)), EmptyControlCache()
