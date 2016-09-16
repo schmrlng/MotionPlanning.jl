@@ -4,34 +4,38 @@ export ReedsSheppExact, DubinsExact, SimpleCarMetric
 ### (Quasi)Metric Typedefs/Evaluation
 immutable ReedsSheppExact{T<:AbstractFloat} <: Metric
     r::T
+    s::T
     p::Vector{StepControl{T,2}}    # scratch space to avoid extra memory allocation
 
-    ReedsSheppExact(r::T) = new(r, Array(StepControl{T,2}, 5))
+    ReedsSheppExact(r::T, s::T) = new(r, s, Array(StepControl{T,2}, 5))
 end
-ReedsSheppExact{T<:AbstractFloat}(r::T) = ReedsSheppExact{T}(r)
+ReedsSheppExact{T<:AbstractFloat}(r::T = T(1), s::T = T(1)) = ReedsSheppExact{T}(r, s)
 immutable DubinsExact{T<:AbstractFloat} <: QuasiMetric
     r::T
+    s::T
     p::Vector{StepControl{T,2}}    # scratch space to avoid extra memory allocation
 
-    DubinsExact(r::T) = new(r, Array(StepControl{T,2}, 3))
+    DubinsExact(r::T, s::T) = new(r, s, Array(StepControl{T,2}, 3))
 end
-DubinsExact{T<:AbstractFloat}(r::T) = DubinsExact{T}(r)
+DubinsExact{T<:AbstractFloat}(r::T = T(1), s::T = T(1)) = DubinsExact{T}(r, s)
 typealias SimpleCarMetric{T} Union{ReedsSheppExact{T}, DubinsExact{T}}
 
-evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.p)[1]
-evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.p)[1]
-changeprecision{T<:AbstractFloat}(::Type{T}, dist::ReedsSheppExact) = ReedsSheppExact(T(dist.r))
-changeprecision{T<:AbstractFloat}(::Type{T}, dist::DubinsExact) = DubinsExact(T(dist.r))
+evaluate(RS::ReedsSheppExact, v::SE2State, w::SE2State) = reedsshepp(v, w, RS.r, RS.s, RS.p)[1]
+evaluate(D::DubinsExact, v::SE2State, w::SE2State) = dubins(v, w, D.r, D.s, D.p)[1]
+changeprecision{T<:AbstractFloat}(::Type{T}, dist::ReedsSheppExact) = ReedsSheppExact(T(dist.r, dist.s))
+changeprecision{T<:AbstractFloat}(::Type{T}, dist::DubinsExact) = DubinsExact(T(dist.r, dist.s))
 
 ## (Quasi)Metric Space Instantiation
-function ReedsSheppMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T}))
+function ReedsSheppMetricSpace{T}(r::T, s::T = T(1), lo::AbstractVector = zeros(SVector{2,T}),
+                                                     hi::AbstractVector = ones(SVector{2,T}))
     BoundedStateSpace(SE2State([lo; T(0)]), SE2State([hi; 2*T(pi)]),
-                      ChoppedMetric(ReedsSheppExact(r), Euclidean(), T(Inf)),
+                      ChoppedMetric(ReedsSheppExact(r, s), Euclidean(), T(Inf)),
                       VectorView(1:2))
 end
-function DubinsQuasiMetricSpace{T}(r::T, lo::AbstractVector = zeros(SVector{2,T}), hi::AbstractVector = ones(SVector{2,T}))
+function DubinsQuasiMetricSpace{T}(r::T, s::T = T(1), lo::AbstractVector = zeros(SVector{2,T}),
+                                                      hi::AbstractVector = ones(SVector{2,T}))
     BoundedStateSpace(SE2State([lo; T(0)]), SE2State([hi; 2*T(pi)]),
-                      ChoppedQuasiMetric(DubinsExact(r), Euclidean(), T(Inf)),
+                      ChoppedQuasiMetric(DubinsExact(r, s), Euclidean(), T(Inf)),
                       VectorView(1:2))
 end
 
@@ -61,8 +65,8 @@ function propagate{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2}
                  mod2piF(v.θ + u.t*s*invr))
     end
 end
-steering_control(RS::ReedsSheppExact, v::SE2State, w::SE2State) = copy(reedsshepp(v, w, RS.r, RS.p)[2])
-steering_control(D::DubinsExact, v::SE2State, w::SE2State) = copy(dubins(v, w, D.r, D.p)[2])
+steering_control(RS::ReedsSheppExact, v::SE2State, w::SE2State) = copy(reedsshepp(v, w, RS.r, RS.s, RS.p)[2])
+steering_control(D::DubinsExact, v::SE2State, w::SE2State) = copy(dubins(v, w, D.r, D.s, D.p)[2])
 function collision_waypoints{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2})
     s = u.u[1]
     invr = u.u[2]
@@ -80,13 +84,19 @@ end
 ### Simple Car Steering Nuts and Bolts
 carsegment2stepcontrol{T}(t::Int, d::T) = StepControl(abs(d), SVector(T(sign(d)), T(t)))
 scaleradius{T}(u::StepControl{T,2}, r::T) = StepControl(u.t*r, SVector(u.u[1], u.u[2]/r))
+scalespeed{T}(u::StepControl{T,2}, s::T) = StepControl(u.t/s, SVector(u.u[1]*s, u.u[2]))
 function scaleradius!(u::ZeroOrderHoldControl, r)
     for i in 1:length(u)
         u[i] = scaleradius(u[i], r)
     end
     u
 end
-mod2piF{T}(x::T) = mod(x, 2*T(pi))
+function scalespeed!(u::ZeroOrderHoldControl, s)
+    for i in 1:length(u)
+        u[i] = scalespeed(u[i], s)
+    end
+    u
+end
 
 ## Dubins Steering Nuts and Bolts
 function dubinsLSL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
@@ -185,7 +195,7 @@ function dubinsLRL!{T}(d::T, a::T, b::T, c::T, path::Vector{StepControl{T,2}})
     cnew
 end
 
-function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(StepControl{T,2}, 3))
+function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), s::T = T(1), pmin = Array(StepControl{T,2}, 3))
     v = (s2[(1,2)] - s1[(1,2)]) / r
     d = norm(v)
     th = atan2(v)
@@ -199,7 +209,7 @@ function dubins{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), pmin = Array(S
     cmin = dubinsLSR!(d, a, b, cmin, pmin)
     cmin = dubinsRLR!(d, a, b, cmin, pmin)
     cmin = dubinsLRL!(d, a, b, cmin, pmin)
-    cmin*r, scaleradius!(pmin, r)
+    cmin*r, scalespeed!(scaleradius!(pmin, r), s)
 end
 
 # function save_dubins_cache(Xmax = 5., Ymax = 5., Nx = 101, Ny = 101, Nt = 101,
@@ -253,7 +263,7 @@ backwards!(u::ZeroOrderHoldControl) = reverse!(u)
 const POST, POST_T, POST_R, POST_B, POST_R_T, POST_B_T, POST_B_R, POST_B_R_T = 0, 1, 2, 3, 4, 5, 6, 7
 
 # Gotta check 'em all
-function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(StepControl{T,2}, 5))
+function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), s::T = T(1),  p = Array(StepControl{T,2}, 5))
     dx, dy = (s2[(1,2)] - s1[(1,2)]) / r
     ct, st = cos(s1.θ), sin(s1.θ)
     target = SE2State(dx*ct + dy*st, -dx*st + dy*ct, mod2piF(s2.θ - s1.θ))
@@ -334,7 +344,7 @@ function reedsshepp{T}(s1::SE2State{T}, s2::SE2State{T}, r::T = T(1), p = Array(
     b, c, l = LpRmSmLmRp!(rTarget, c, l, p); b && (post = POST_R)
     b, c, l = LpRmSmLmRp!(trTarget, c, l, p); b && (post = POST_R_T)
 
-    u = scaleradius!(p[1:l], r)
+    u = scalespeed!(scaleradius!(p[1:l], r), s)
     if post == POST_T
         timeflip!(u)
     elseif post == POST_R

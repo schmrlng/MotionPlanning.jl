@@ -1,5 +1,5 @@
-export shortcut, adaptive_shortcut, adaptive_shortcut!, discretize_path
-export cost_discretize_solution!, cost_space_solution!, time_discretize_solution!
+export shortcut, adaptive_shortcut, adaptive_shortcut!
+export smooth_solution!, time_discretize_solution!, time_space_solution!
 
 ### ADAPTIVE-SHORTCUT (Hsu 2000)
 

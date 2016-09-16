@@ -85,6 +85,19 @@ function propagate(d::Union{Metric, QuasiMetric}, v::State, us::ControlSequence)
     end
     v
 end
+function propagate(d::Union{Metric, QuasiMetric}, v::State, us::ControlSequence, s::AbstractFloat)
+    s <= 0 && return v
+    t = zero(s)
+    for u in us
+        if s >= t + duration(u)
+            v = propagate(d, v, u)
+            t += duration(u)
+        else
+            return propagate(d, v, u, s - t)
+        end
+    end
+    v
+end
 function propagate{T<:AbstractFloat}(d::Union{Metric, QuasiMetric}, v::State, u::ControlInfo, s::AbstractVector{T})
     [propagate(d, v, u, t) for t in s]
 end

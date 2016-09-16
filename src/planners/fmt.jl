@@ -115,5 +115,5 @@ function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = T(1),
     connections == :R && (solution_metadata["r"] = r)
     connections == :K && (solution_metadata["k"] = k)
     P.solution = MPSolution(P.status, C[z], toq(), solution_metadata)
-    C[z]
+    P.status, P.solution.cost, P.solution.elapsed
 end

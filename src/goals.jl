@@ -63,7 +63,7 @@ ConvexHullStateSpaceGoal{S<:State}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}
 ConvexHullStateSpaceGoal{S<:SVector}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}(sts)
 ConvexHullStateSpaceGoal{S<:FieldVector}(sts::Vector{S}) = ConvexHullStateSpaceGoal{S}(sts)
 ConvexHullStateSpaceGoal{V<:AbstractVector}(sts::Vector{V}) = ConvexHullStateSpaceGoal([SVector(s) for s in sts])
-StateGoal(s::AbstractVector) = ConvexHullStateSpaceGoal([s])
+StateGoal(s::State) = ConvexHullStateSpaceGoal([s])
 changeprecision{T<:AbstractFloat}(::Type{T}, G::ConvexHullStateSpaceGoal) =
     ConvexHullStateSpaceGoal(changeprecision(T, G.sts))
 

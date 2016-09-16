@@ -92,7 +92,7 @@ type ChoppedQuasiMetric{M<:QuasiMetric,B<:Metric,T<:AbstractFloat} <: PreMetric
 end
 "Type union encompassing `ChoppedMetric` and `ChoppedQuasiMetric`."
 typealias ChoppedPreMetric{M,B,T} Union{ChoppedMetric{M,B,T}, ChoppedQuasiMetric{M,B,T}}
-function evaluate(clbm::ChoppedPreMetric, v::State, w::State)
+function evaluate(clbm::ChoppedPreMetric, v::AbstractVector, w::AbstractVector)    # TODO: maybe remove `AbstractState`?
     lb = evaluate(clbm.lowerbound, v, w)
     lb > clbm.chopval && return oftype(clbm.chopval, Inf)   # Inf is a sentinel value more numerically robust than using
     d = evaluate(clbm.m, v, w)                              # chopval; technically breaks the metric inequality

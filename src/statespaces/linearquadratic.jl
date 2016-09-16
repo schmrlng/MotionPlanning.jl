@@ -10,6 +10,7 @@ immutable LinearQuadratic2BVP{T<:AbstractFloat,
                               Fcost<:Function,
                               Fdcost<:Function,
                               Fddcost<:Function,
+                              Fu<:Function,
                               Fx<:Function}
     A::Matrix{T}
     B::Matrix{T}
@@ -21,6 +22,7 @@ immutable LinearQuadratic2BVP{T<:AbstractFloat,
     cost::Fcost
     dcost::Fdcost
     ddcost::Fddcost
+    u::Fu
     x::Fx
 end
 type LinearQuadratic{T<:AbstractFloat,L<:LinearQuadratic2BVP} <: QuasiMetric
@@ -102,9 +104,9 @@ function Sym2Function(s::SymPy.Sym, args::Union{Symbol, Expr} = :t, replace_rule
     @eval $args -> $(parse(sliteral))
 end
 function Sym2Function(s::Vector{SymPy.Sym}, args::Union{Symbol, Expr} = :t, replace_rules = (); sv = false)
-    vliteral = (sv ? "SVector(" : "[") *
+    vliteral = (sv ? "SVector((" : "[") *
                join(map(x -> string(SymPy.simplify(SymPy.expand(x))), s), ", ") *
-               (sv ? ")" : "]")
+               (sv ? ",))" : "]")
     for rr in replace_rules
         vliteral = replace(vliteral, rr...)
     end
@@ -139,6 +141,7 @@ function LinearQuadratic2BVP{T}(A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Mat
     costS = t + ((yS - xbarS)'*GinvS*(yS - xbarS))[1]
     dcostS = SymPy.diff(costS, t)
     ddcostS = SymPy.diff(costS, t, 2)
+    uS = inv(R)*B'*expAt(A, t - s)'*GinvS*(yS-xbarS)
     xS = expAsS*xS + SymPy.integrate(expAsS, s)*c +
          SymPy.integrate(expAsS*B*inv(R)*B'*expAsS', s)*expAt(A, t - s)'*GinvS*(yS-xbarS)
 
@@ -149,6 +152,7 @@ function LinearQuadratic2BVP{T}(A::Matrix{T}, B::Matrix{T}, c::Vector{T}, R::Mat
                         Sym2Function(costS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
                         Sym2Function(dcostS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
                         Sym2Function(ddcostS, :(x::AbstractVector, y::AbstractVector, t::$T), replace_rules),
+                        Sym2Function(uS, :(x::AbstractVector, y::AbstractVector, t::$T, s::$T), replace_rules, sv=true),
                         Sym2Function(xS, :(x::AbstractVector, y::AbstractVector, t::$T, s::$T), replace_rules, sv=true))
 end
 

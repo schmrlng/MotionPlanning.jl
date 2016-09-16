@@ -87,5 +87,12 @@ countnz(x::SparseVectorView) = countnz(x.nzval)
 nonzeros(x::SparseVectorView) = x.nzval
 nonzeroinds(x::SparseVectorView) = x.nzind
 
+# angles
+mod2piF{T}(x::T) = mod(x, 2*T(pi))
+function adiff(x,y)
+    x = mod2piF(x)
+    y = mod2piF(y)
+    abs(x - y) <= pi ? x - y : (x > y ? x - y - 2pi : x - y + 2pi)
+end
 
 include("vec2Dutils.jl")
