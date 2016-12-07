@@ -55,7 +55,7 @@ abstract DistanceDataStructure{T}; begin
     immutable TreeDistanceDS{NNT<:NearestNeighbors.NNTree,T} <: DistanceDataStructure{T}
         tree::NNT
     end
-    TreeDistanceDS{T}(tree::NearestNeighbors.NNTree{T}) = TreeDistanceDS{typeof(tree),T}(tree)
+    TreeDistanceDS{V}(tree::NearestNeighbors.NNTree{V}) = TreeDistanceDS{typeof(tree),eltype(V)}(tree)
 end
 
 ### Construction
@@ -136,25 +136,44 @@ for direction in ("", "F", "B")
 end
 
 function inball(V::Vector, dist::PreMetric, DS::DistanceDataStructure, v::Int, r, forwards::Bool = true)
-    ds = forwards ? colwise(dist, V[v], V) : colwise(dist, V, V[v])
-    @devec nn_bool = ds .<= r
-    nn_bool[v] = false
-    inds = find(nn_bool)
-    SparseVector(length(V), inds, ds[inds])
+    allds = forwards ? colwise(dist, V[v], V) : colwise(dist, V, V[v])
+    N = length(V)
+    inds = Vector{Int}(0)
+    ds = similar(allds, 0)
+    @inbounds for i in 1:N
+        if i != v && allds[i] <= r
+            push!(inds, i)
+            push!(ds, allds[i])
+        end
+    end
+    SparseVector(N, inds, ds)
 end
 
 function inball{A<:Matrix}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
-    @devec nn_bool = DS.Dmat[:,v] .<= r
-    nn_bool[v] = false
-    inds = find(nn_bool)
-    SparseVector(length(V), inds, DS.Dmat[inds,v])
+    N = length(V)
+    inds = Vector{Int}(0)
+    ds = similar(DS.Dmat, 0)
+    @inbounds for i in 1:N
+        if i != v && DS.Dmat[i,v] <= r
+            push!(inds, i)
+            push!(ds, allds[i])
+        end
+    end
+    SparseVector(N, inds, ds)
 end
 
 function inball{A<:SparseMatrixCSC}(V::Vector, dist::PreMetric, DS::BruteDistanceDS{A}, v::Int, r, forwards::Bool = true)
     vcol = viewcol(DS.Dmat, v)
-    inds, ds = nonzeroinds(vcol), nonzeros(vcol)
-    @devec nn_bool = ds .<= r
-    SparseVector(length(V), inds[nn_bool], ds[nn_bool])
+    allinds, allds = nonzeroinds(vcol), nonzeros(vcol)
+    inds = Vector{Int}(0)
+    ds = Vector{eltype(A)}(0)
+    @inbounds for i in 1:length(allinds)
+        if allinds[i] != v && allds[i] <= r
+            push!(inds, allinds[i])
+            push!(ds, allds[i])
+        end
+    end
+    SparseVector(length(V), inds, ds)
 end
 
 function inball{S}(V::Vector{S}, dist::PreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
@@ -164,11 +183,18 @@ function inball{S}(V::Vector{S}, dist::PreMetric, DS::TreeDistanceDS, v::Int, r,
 end
 
 function inball{S}(V::Vector{S}, dist::ChoppedPreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
-    inds = inrange(DS.tree, V[v], r, true)
-    inds = deleteat!(inds, searchsortedfirst(inds, v))
-    ds = forwards ? colwise(dist, V[v], V[inds]) : colwise(dist, V[inds], V[v])
-    @devec nn_bool = ds .<= r
-    SparseVector(length(V), inds[nn_bool], ds[nn_bool])
+    allinds = inrange(DS.tree, V[v], r, true)
+    allinds = deleteat!(allinds, searchsortedfirst(allinds, v))
+    allds = forwards ? colwise(dist, V[v], V[allinds]) : colwise(dist, V[allinds], V[v])
+    inds = Vector{Int}(0)
+    ds = similar(allds, 0)
+    @inbounds for i in 1:length(allinds)
+        if allds[i] <= r
+            push!(inds, allinds[i])
+            push!(ds, allds[i])
+        end
+    end
+    SparseVector(N, inds, ds)
 end
 
 for ff in [x -> Symbol("inball", x), x -> Symbol("inball", x, "!")]

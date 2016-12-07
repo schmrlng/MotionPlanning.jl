@@ -49,7 +49,7 @@ function helper_data_structures{S<:SE2State,R<:DubinsExact}(V::Vector{S}, M::Cho
 end
 # Required for CLBM
 evaluate(M::Euclidean, v::SE2State, w::SE2State) = norm(v[(1,2)] - w[(1,2)])
-inrange{T<:AbstractFloat}(t::NearestNeighbors.NNTree{T}, v::SE2State{T}, r::T, s=false) = inrange(t, v[(1,2)], r, s)
+inrange{V,T<:AbstractFloat}(t::NearestNeighbors.NNTree{V}, v::SE2State{T}, r::T, s=false) = inrange(t, v[(1,2)], r, s)
 
 ### Steering
 function propagate{T}(M::SimpleCarMetric{T}, v::SE2State{T}, u::StepControl{T,2})
