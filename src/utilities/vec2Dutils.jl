@@ -2,9 +2,6 @@ import Base: atan2, cross, dot, normalize
 export norm2, perp, project, projectN, reflect, reflectN, rotate
 export projectNextrema, voronoi_region, overlapping, ininterval, minmaxV, wrap1
 
-dot(v1::StaticVector, v2::StaticVector) = vecdot(v1,v2)
-norm(v::StaticVector) = sqrt(dot(v, v))
-normalize(v::StaticVector) = v / norm(v)
 norm2(v::SVector{2}) = dot(v,v)
 perp(v::SVector{2}) = SVector(v[2],-v[1])
 cross(v1::SVector{2}, v2::SVector{2}) = v1[1]*v2[2] - v1[2]*v2[1]
