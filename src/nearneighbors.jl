@@ -179,7 +179,7 @@ end
 function inball{S}(V::Vector{S}, dist::PreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
     inds = inrange(DS.tree, V[v], r, true)
     inds = deleteat!(inds, searchsortedfirst(inds, v))
-    SparseVector(length(V), inds, forwards ? colwise(dist, V[v], DS.tree.data[:,inds]) : colwise(dist, DS.tree.data[:,inds], V[v]))
+    SparseVector(length(V), inds, forwards ? colwise(dist, V[v], V[inds]) : colwise(dist, V[inds], V[v]))
 end
 
 function inball{S}(V::Vector{S}, dist::ChoppedPreMetric, DS::TreeDistanceDS, v::Int, r, forwards::Bool = true)
@@ -194,7 +194,7 @@ function inball{S}(V::Vector{S}, dist::ChoppedPreMetric, DS::TreeDistanceDS, v::
             push!(ds, allds[i])
         end
     end
-    SparseVector(N, inds, ds)
+    SparseVector(length(V), inds, ds)
 end
 
 for ff in [x -> Symbol("inball", x), x -> Symbol("inball", x, "!")]

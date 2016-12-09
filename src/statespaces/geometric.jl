@@ -11,7 +11,7 @@ BoundedEuclideanStateSpace(lo::AbstractVector, hi::AbstractVector) =
     BoundedStateSpace(SVector(lo), SVector(hi), Euclidean(), Identity())
 UnitHypercube{T<:AbstractFloat}(d::Int, ::Type{T} = Float64) = BoundedEuclideanStateSpace(zeros(T,d), ones(T,d))
 
-helper_data_structures{S}(V::Vector{S}, M::Euclidean) = (TreeDistanceDS(KDTree(statevec2mat(V), M; reorder=false)),
+helper_data_structures{S}(V::Vector{S}, M::Euclidean) = (TreeDistanceDS(KDTree(V, M; reorder=false)),
                                                          EmptyControlCache())
 
 ### Steering
