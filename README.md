@@ -16,7 +16,7 @@ Pkg.clone("https://github.com/schmrlng/MotionPlanning.jl.git")
 at the ```julia>``` prompt (and let me know if it actually works!).
 
 ## Documentation
-Doesn't exist. At least for now. Check out some [basic usage examples](http://nbviewer.ipython.org/github/schmrlng/MotionPlanning.jl/blob/master/doc/MotionPlanning.ipynb) and peruse the source, or message me if you have any particular questions about the code.
+Doesn't exist. At least for now. Check out some [basic usage examples](http://nbviewer.ipython.org/github/schmrlng/MotionPlanning.jl/blob/master/docs/MotionPlanning.ipynb) and peruse the source, or message me if you have any particular questions about the code.
 
 ## Disclaimers
 - This code is so alpha that if it was particle, it never would have made it past the paper planning phase.
