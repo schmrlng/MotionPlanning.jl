@@ -1,119 +1,90 @@
 export fmtstar!
 
-fmtstar!(P::MPProblem; kwargs...) = fmtstar!(P, length(P.V); kwargs...)
-function fmtstar!{T}(P::MPProblem{T}, N::Int; rm::T = T(1),
-                                              connections::Symbol = :R,
-                                              k = min(ceil(Int, (2*rm)^dim(P.SS)*(e/dim(P.SS))*log(N)), N-1),
-                                              r = T(0),
-                                              ensure_goal_ct = 1,
-                                              init_idx = 1,
-                                              checkpts = true)  # TODO: bleh, prefer false
-    tic()
-    P.CC.count = 0
+# status = 'U', 'O', or 'C' (unvisited, open, closed)
+const FMTNodeInfo{X,D} = NamedTuple{(:is_free, :status, :parent, :cost_to_come),Tuple{Bool,Char,X,D}}
+function FMTNodeInfo{X,D}(; is_free=false, status='U', parent=zero(X), cost_to_come=zero(D)) where {X,D}
+    (is_free=is_free, status=status, parent=parent, cost_to_come=cost_to_come)
+end
 
-    if connections == :R
-        nearF = inballF!
-        nearB = inballB!
-    elseif connections == :K
-        nearF = mutualknnF!
-        nearB = knnB!
-    else
-        error("Connection type must be radial (:R) or k-nearest (:K)")
+function fmtstar!(P::MPProblem; r, ensure_goal_count=0, compute_full_metadata=true)
+    P.status, P.solution = fmtstar!(P.state_space, P.bvp, P.init, P.goal, P.collision_checker,
+                                    isdefined(P, :graph) ? P.graph : error("TODO"), r, ensure_goal_count)
+    if P.status === :solved && compute_full_metadata
+        metadata = P.solution.metadata
+
+        X = indextype(P.graph)
+        node_info = metadata[:node_info]
+        metadata[:tree] = Dict{X,X}(k => node_info[k].parent for k in keys(node_info) if node_info[k].status != 'U')
     end
-    r > 0 && setup_steering(P.SS, r)
-    if !is_free_state(P.init, P.CC, P.SS)
+    P.status, P.solution
+end
+
+function fmtstar!(state_space::StateSpace,
+                  bvp::SteeringBVP,
+                  init::State,
+                  goal::Goal,
+                  collision_checker::CollisionChecker,
+                  graph::NearNeighborGraph{NeighborInfo{X,D,U}},
+                  r, ensure_goal_count=0) where {X,D,U}
+    tic = time()
+    collision_checker.motion_count[] = collision_checker.edge_count[] = 0    # reset!(collision_checker)
+
+    if !is_free_state(collision_checker, init)
         warn("Initial state is infeasible!")
-        P.status = :failed
-        P.solution = MPSolution(P.status, T(Inf), toq(), Dict())
-        return T(Inf)
-    end
-    free_volume_ub = sample_free!(P, N - length(P.V), ensure_goal_ct = ensure_goal_ct)  # TODO: clean this logic up
-    if checkpts
-        F = trues(N)
-        for i in 1:N
-            F[i] = is_free_state(P.V[i], P.CC, P.SS)
-        end
-    end
-    if r == 0
-        d = dim(P.SS)
-        r = T(rm*2*(1/d*free_volume_ub/(pi^(d/2)/gamma(d/2+1))*log(N)/N)^(1/d))
-        setup_steering(P.SS, r)
+        status = :infeasible
+        solution = MPSolution(status, D(Inf), time() - tic, Dict{Symbol,Any}())
+        return status, solution
     end
 
-    A = zeros(Int,N)
-    W = trues(N)
-    H = falses(N)
-    C = zeros(T,N)
-    P.V.init = P.init
-    if P.V[init_idx] == P.init
-        W[init_idx] = false
-        H[init_idx] = true
-        HHeap = Collections.PriorityQueue([init_idx], T[0])
-    else    # special casing the first expansion round of FMT if P.init is not in the sample set
-        # HHeap = Collections.PriorityQueue(Int[], T[])
-        # neighborhood = (connections == :R ? inballF(P.V, P.init, r) : knnF(P.V, P.init, r))
-        # for ii in 1:length(nonzeroinds(neighborhood))
-        #     x, c = nonzeroinds(neighborhood)[ii], nonzeros(neighborhood)[ii]
-        #     if is_free_motion(P.init, P.V[x], P.CC, P.SS)
-        #         A[x] = 0
-        #         C[x] = c
-        #         HHeap[x] = c
-        #         H[x] = true
-        #         W[x] = false
-        #     end
-        # end
-    end
-    z = Collections.dequeue!(HHeap)    # i.e. z = init_idx
+    setinit!(graph, init, r)
+    setgoal!(graph, () -> rand_free_state(collision_checker, goal), r, count=ensure_goal_count)
+    node_info = node_info_datastructure(graph.nodes, FMTNodeInfo{X,D},
+        x -> FMTNodeInfo{X,D}(is_free=is_free_state(collision_checker, x) && x in state_space))
+    is_unvisited = let node_info=node_info; n -> (ni = node_info[n.index]; ni.is_free && ni.status == 'U'); end
+    is_open      = let node_info=node_info; n -> node_info[n.index].status == 'O';  end    # JuliaLang/julia#15276
 
-    while !is_goal_pt(P.V[z], P.goal, P.SS)
-        H_new = Int[]
-        for x in (connections == :R ? nonzeroinds(nearF(P.V, z, r, W)) : nonzeroinds(nearF(P.V, z, k, W)))
-            checkpts && !F[x] && continue
-            neighborhood = (connections == :R ? nearB(P.V, x, r, H) : nearB(P.V, x, k, H))
-            c_min, y_idx = findmin(C[nonzeroinds(neighborhood)] + nonzeros(neighborhood))
-            y_min = nonzeroinds(neighborhood)[y_idx]
-            if is_free_motion(P.V[y_min], P.V[x], P.CC, P.SS)
-                A[x] = y_min
-                C[x] = c_min
-                HHeap[x] = c_min
-                push!(H_new, x)
-                W[x] = false
+    open_queue = PriorityQueue{X,D}()
+    z = X(0)
+    node_info[z] = (node_info[z]..., status='O')
+
+    while !(graph[z] in goal)
+        for (x, _, _) in neighbors(is_unvisited, graph, z, r, dir=Val(:F))
+            isempty(neighbors(is_open, graph, x, r, dir=Val(:B))) && @show (z, x, isempty(neighbors(is_open, graph, x, r, dir=Val(:B))))
+            y_min, c_min, u_min = mapreduce(let node_info=node_info    # JuliaLang/julia#15276
+                                                n -> (index=n.index,
+                                                      cost=node_info[n.index].cost_to_come + n.cost,
+                                                      controls=n.controls)
+                                            end,
+                                            (a, b) -> ifelse(a.cost < b.cost, a, b),
+                                            neighbors(is_open, graph, x, r, dir=Val(:B)))
+            if is_free_edge(collision_checker, bvp, graph[y_min], graph[x], u_min)
+                node_info[x] = (is_free=true, status='O', parent=y_min, cost_to_come=c_min)
+                open_queue[x] = c_min
             end
         end
-        H[H_new] = true
-        H[z] = false
-        if !isempty(HHeap)
-            z = Collections.dequeue!(HHeap)
-        else
-            break
-        end
+        node_info[z] = (node_info[z]..., status='C')
+        isempty(open_queue) ? break : z = dequeue!(open_queue)
     end
 
-    sol = [z]
-    costs = [C[z]]
-    while sol[1] != 1
-        unshift!(sol, A[sol[1]])
-        if sol[1] == 0
-            unshift!(costs, T(0))
-            break
-        end
-        unshift!(costs, C[sol[1]])
+    solution_nodes = [z]
+    costs_to_come = [node_info[z].cost_to_come]
+    while linear_index(solution_nodes[1]) != 0
+        pushfirst!(solution_nodes, node_info[solution_nodes[1]].parent)
+        pushfirst!(costs_to_come, node_info[solution_nodes[1]].cost_to_come)
     end
 
-    P.status = is_goal_pt(P.V[z], P.goal, P.SS) ? :solved : :failed
-    solution_metadata = Dict(
-        "radius_multiplier" => rm,
-        "collision_checks" => P.CC.count,
-        "num_samples" => N,
-        "cost" => C[z],
-        "cumcost" => costs,
-        "planner" => "FMTstar",
-        "solved" => is_goal_pt(P.V[z], P.goal, P.SS),
-        "tree" => A,
-        "path" => sol
+    status = graph[z] in goal ? :solved : :failed
+    solution_metadata = Dict{Symbol,Any}(
+        :r => r,
+        :motion_checks => collision_checker.motion_count[],
+        :edge_checks => collision_checker.edge_count[],
+        :cost => costs_to_come[end],
+        :costs_to_come => costs_to_come,
+        :planner => :FMTstar,
+        :solved => status === :solved,
+        :solution_nodes => solution_nodes,
+        :node_info => node_info
     )
-    connections == :R && (solution_metadata["r"] = r)
-    connections == :K && (solution_metadata["k"] = k)
-    P.solution = MPSolution(P.status, C[z], toq(), solution_metadata)
-    P.status, P.solution.cost, P.solution.elapsed
+    solution = MPSolution(status, costs_to_come[end], time() - tic, solution_metadata)
+    status, solution
 end

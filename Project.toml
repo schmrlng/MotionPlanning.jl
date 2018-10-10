@@ -1,0 +1,22 @@
+name = "MotionPlanning"
+uuid = "c5d745f8-70fc-52d0-9e1a-245f1883d602"
+authors = ["Ed Schmerling <ednerd@gmail.com>"]
+version = "1.0.0"
+
+[deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+DifferentialDynamicsModels = "cb52cc87-d0c7-5933-bad1-08679d8b4c67"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TypeSortedCollections = "94a5cd58-49a0-5741-bd07-fa4f4be8babf"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+SeparatingAxisTheorem2D = "33f35c42-577e-5c66-8569-bbf1771cbf32"
+
+[targets]
+test = ["Test", "SeparatingAxisTheorem2D"]

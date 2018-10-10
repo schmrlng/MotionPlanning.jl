@@ -1,10 +1,8 @@
-julia 0.5
-Reexport
-StaticArrays
-Distances
-PyPlot
-Distributions
-SCS
-Iterators
-NearestNeighbors
-SymPy
+julia 0.7
+DataStructures 0.12.0
+TypeSortedCollections 0.6.0
+Reexport 0.2.0
+StaticArrays 0.8.2
+DifferentialDynamicsModels
+Requires 0.5.2
+RecipesBase 0.6.0

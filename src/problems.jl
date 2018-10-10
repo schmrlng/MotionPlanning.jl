@@ -1,65 +1,87 @@
-import Base.copy
 export MPProblem, MPSolution
-export clearsamples!
 
-type MPSolution{T}
+struct MPSolution{T}
     status::Symbol
     cost::T
     elapsed::Float64
-    metadata::Dict
+    metadata::Dict{Symbol,Any}
 end
 
-type MPProblem{T<:AbstractFloat}
-    SS::StateSpace
+mutable struct MPProblem
+    state_space::StateSpace
+    bvp::SteeringBVP
     init::State
     goal::Goal
-    CC::CollisionChecker
-    V::SampleSet
-    config_name::String
+    collision_checker::CollisionChecker
     status::Symbol
-    solution::MPSolution{T}
+    graph::NearNeighborGraph
+    solution::MPSolution
 
-    function MPProblem(SS::StateSpace,
+    function MPProblem(state_space::StateSpace,
+                       bvp::SteeringBVP,
                        init::State,
                        goal::Goal,
-                       CC::CollisionChecker,
-                       V::SampleSet,
-                       config_name::String="$(dim(SS))D $(typeof(SS))")
-        new(SS, init, goal, CC, V, config_name, "not yet solved")
+                       collision_checker::CollisionChecker)
+        new(state_space, bvp, init, goal, collision_checker, :unsolved)
     end
 end
-changeprecision{T<:AbstractFloat}(::Type{T}, P::MPProblem) =
-    MPProblem(map(x -> changeprecision(T,x), (P.SS, P.init, P.goal, P.CC))...)  # TODO: changeprecision for `SampleSet`s
 
-MPProblem{S}(SS::StateSpace{S}, init::State, goal::Goal, CC::CollisionChecker) =
-    MPProblem{eltype(S)}(SS, S(init), goal, CC, defaultNN(SS, S(init)))
-function copy(P::MPProblem)
-    Pcopy = MPProblem(P.SS, P.init, P.goal, P.CC, P.V, P.config_name)
-    Pcopy.status = P.status
-    Pcopy.solution = P.solution
-    Pcopy
-end
-function clearsamples!(P::MPProblem)
-    P.V = defaultNN(P.SS, P.init)
-end
-
-plot_path(SS::StateSpace, V::SampleSet, sol; kwargs...) = plot_path(V[sol], SS; kwargs...)
-plot_tree(SS::StateSpace, V::SampleSet, A; kwargs...) = plot_tree(V.V, A, SS; kwargs...)
-
-function plot(P::MPProblem; SS=true, CC=true, goal=true, meta=false, sol=true, smoothed=false)
-    SS && plot(P.SS)
-    CC && plot(P.CC, P.SS.lo, P.SS.hi)
-    goal && plot(P.goal, P.SS)
-    if isdefined(P, :solution)
-        S = P.solution
-        if meta
-            haskey(S.metadata, "tree") && plot_tree(P.SS, P.V, S.metadata["tree"], color="gray", alpha=0.5)
-            # TODO: graph (PRM)
+@recipe function f(P::MPProblem; dims=(1, 2),
+                                 statespace_color=:black, statespace_alpha=1,
+                                 goal_color=:green, goal_alpha=1, goal_markershape=:star, goal_markersize=10,
+                                 obstacle_color=:red, obstacle_alpha=1,
+                                 show_tree=false, tree_color=:grey, tree_alpha=0.5, tree_markersize=2, tree_edge_waypoints=10,
+                                 solution_color=:blue, solution_alpha=1, solution_markersize=2, solution_edge_waypoints=10)
+    dims  --> dims
+    label --> ""
+    x, y = dims
+    @series begin
+        color --> statespace_color
+        alpha --> statespace_alpha
+        P.state_space
+    end
+    @series begin
+        color       --> goal_color
+        alpha       --> goal_alpha
+        markershape --> goal_markershape
+        markersize  --> goal_markersize
+        P.goal
+    end
+    @series begin
+        color --> obstacle_color
+        alpha --> obstacle_alpha
+        P.collision_checker
+    end
+    if show_tree && isdefined(P, :solution) && :tree in keys(P.solution.metadata)
+        for (j, i) in P.solution.metadata[:tree]    # tree pairs are child => parent
+            @series begin
+                color          --> tree_color
+                alpha          --> tree_alpha
+                edge_waypoints --> tree_edge_waypoints
+                plot_endpoints --> false
+                SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
+            end
         end
-        sol && plot_path(P.SS, P.V, S.metadata["path"], color="blue")
-        smoothed && haskey(S.metadata, "smoothed_path") && plot_path(S.metadata["smoothed_path"], color="orange")
-        P.status, P.status == :solved ? P.solution.cost : Inf
-    else
-        "unsolved"
+        @series begin
+            seriestype  --> :scatter
+            color       --> tree_color
+            alpha       --> tree_alpha
+            markersize  --> tree_markersize
+            delete!(plotattributes, :dims)
+            pts = [P.collision_checker.state2config(P.graph[i]) for i in keys(P.solution.metadata[:tree])]
+            [p[x] for p in pts], [p[y] for p in pts]
+        end
+    end
+    if P.status === :solved
+        for (i, j) in pairwise(P.solution.metadata[:solution_nodes])
+            @series begin
+                color          --> solution_color
+                alpha          --> solution_alpha
+                markersize     --> solution_markersize
+                edge_waypoints --> solution_edge_waypoints
+                plot_endpoints --> true
+                SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
+            end
+        end
     end
 end
