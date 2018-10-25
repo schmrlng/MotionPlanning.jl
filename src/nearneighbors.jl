@@ -1,4 +1,4 @@
-export NeighborInfo, Neighborhood, PackedNeighborhoods
+export Nearest, NeighborInfo, Neighborhood, PackedNeighborhoods
 export NearNeighborDataStructure, MetricNNDS, NullNNDS, MemoizedNNDS
 export NeighborhoodCache, StreamingNC, MemoizedNC, OfflineNC
 export includes_controls, neighbor_info_type, neighbors
@@ -7,13 +7,12 @@ export includes_controls, neighbor_info_type, neighbors
 const F_or_B = Union{Val{:F},Val{:B}}
 const BoolVal = Union{Val{true},Val{false}}
 @inline always_false(::SampleIndex) = false    # used as a filtering predicate
+@inline always_true(::SampleIndex) = true
 @inline keep_controls_if(nt::NamedTuple, cond::BoolVal) = cond === Val(true) ? nt : (nt..., controls=nothing)
 # @inline lattice_neighbors(v::SVector{D}) where {D} = (setindex(v, v[i] + j, i) for i in 1:D for j in (-1, 1))
 @inline lattice_neighbors(v::SVector{D}) where {D} = (v + SVector(Tuple(I)) - SVector(ntuple(i -> 2, D)) for
                                                       I in CartesianIndices(ntuple(i -> 3, D)) if
                                                       I != CartesianIndex(ntuple(i -> 2, D)))        # JuliaLang/julia#29440
-@inline linear_index(i::Int) = i
-@inline linear_index(i::TiledIndex) = i.off_lattice
 @inline collect_if_not_Array(x::Array) = x
 @inline collect_if_not_Array(x) = collect(x)
 @inline includes_controls(x) = includes_controls(typeof(x))
@@ -25,9 +24,9 @@ const Neighborhood{X<:SampleIndex,D,U} = AbstractVector{NeighborInfo{X,D,U}}
 includes_controls( ::Type{  NeighborInfo{X,D,U}}) where {X,D,U} = U !== Nothing
 includes_controls( ::Type{<:Neighborhood{X,D,U}}) where {X,D,U} = U !== Nothing
 neighbor_info_type(::Type{<:Neighborhood{X,D,U}}) where {X,D,U} = NeighborInfo{X,D,U}
-# indextype(   ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = X
-# costtype(    ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = D
-# controlstype(::Type{NeighborInfo{X,D,U}}) where {X,D,U} = U
+indextype(   ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = X
+costtype(    ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = D
+controlstype(::Type{NeighborInfo{X,D,U}}) where {X,D,U} = U
 function _neighbor_info_type(::Type{X}, ::Type{NamedTuple{M,Tuple{D,U}}}, include_controls::BoolVal) where {X,M,D,U}
     include_controls === Val(true) ? NeighborInfo{X,D,U} : NeighborInfo{X,D,Nothing}
 end
@@ -38,6 +37,12 @@ function neighbor_info_type(nodes::SampleSet, bvp::SteeringBVP; include_controls
 end
 function shift_lattice_component(n::NeighborInfo{<:TiledIndex}, shift)
     (index=shift_lattice_component(n.index, shift), cost=n.cost, controls=n.controls)
+end
+function neighbor_info_iterator(nodes, bvp, x, inds, r=nothing; dir::F_or_B=Val(:F),
+                                include_controls::BoolVal=Val(false), omit::F=always_false) where {F}
+    ((index=i, keep_controls_if(dir === Val(:F) ? (r === nothing ? bvp(x, nodes[i]) : bvp(x, nodes[i], r)) :
+                                                  (r === nothing ? bvp(nodes[i], x) : bvp(nodes[i], x, r)),
+                                include_controls)...) for i in inds if !omit(i))
 end
 function reverse_neighbor_dict(i, neighborhood, ::Type{NeighborInfo{X,D,U}}) where {X,D,U}
     Dict{X,NeighborInfo{X,D,U}}(n.index => (index=i, cost=n.cost, controls=n.controls) for n in neighborhood)
@@ -59,11 +64,26 @@ Base.getindex(PN::PackedNeighborhoods, i::Int) = PN.neighborhoods[i]
 includes_controls( ::Type{<:PackedNeighborhoods{X,D,U}}) where {X,D,U} = U !== Nothing
 neighbor_info_type(::Type{<:PackedNeighborhoods{X,D,U}}) where {X,D,U} = NeighborInfo{X,D,U}
 
+# k-Nearest Neighbors
+struct Nearest
+    k::Int
+end
+placeholder_neighborhood(::Type{T}, k) where {T<:NeighborInfo} = Vector{Union{Missing,T}}(missing, k)
+function update_knn!(neighborhood, n::NeighborInfo{X,D,U}) where {X,D,U}
+    if ismissing(neighborhood[1]) || n.cost < neighborhood[1].cost
+        neighborhood[1] = n
+        DataStructures.percolate_down!(neighborhood, 1, Base.Order.By(x -> x === missing ? D(-Inf) : -x.cost))
+    end
+    neighborhood
+end
+
 # Near Neighborhood Caches
 abstract type NeighborhoodCache end
 includes_controls(::Type{<:NeighborhoodCache}) = false
 ## StreamingNC
 struct StreamingNC <: NeighborhoodCache end
+reset!(::StreamingNC) = nothing
+addstates!(::StreamingNC) = nothing
 function neighbors(cache::StreamingNC, nnds, nodes, bvp, v, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))
     neighbors(nnds, nodes, bvp, v, r, dir=dir, include_controls=include_controls)
@@ -71,33 +91,35 @@ end
 
 ## MemoizedNC
 struct MemoizedNC{N<:Neighborhood} <: NeighborhoodCache
-    neighborhoods_F::Vector{N}
-    neighborhoods_B::Vector{N}
+    neighborhoods_F::Vector{Union{Missing,N}}
+    neighborhoods_B::Vector{Union{Missing,N}}
 end
 function MemoizedNC(::Type{T}, n::Int=0, issymmetric::Bool=false) where {T}
     if issymmetric
-        neighborhoods = Vector{Vector{T}}(undef, n)
+        neighborhoods = Vector{Union{Missing,Vector{T}}}(missing, n)
         MemoizedNC(neighborhoods, neighborhoods)
     else
-        MemoizedNC(Vector{Vector{T}}(undef, n), Vector{Vector{T}}(undef, n))
+        MemoizedNC(Vector{Union{Missing,Vector{T}}}(missing, n), Vector{Union{Missing,Vector{T}}}(missing, n))
     end
 end
 function MemoizedNC(nodes::SampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false))
-    MemoizedNC(neighbor_info_type(nodes, bvp, include_controls=include_controls), length(nodes), issymmetric(bvp))
+    MemoizedNC(neighbor_info_type(nodes, bvp, include_controls=include_controls),
+               length(nodes), issymmetric(bvp) && include_controls === Val(false))
 end
 includes_controls( ::Type{MemoizedNC{N}}) where {N} = includes_controls(N)
 neighbor_info_type(::Type{MemoizedNC{N}}) where {N} = neighbor_info_type(N)
+reset!(cache::MemoizedNC) = (fill!(cache.neighborhoods_F, missing); fill!(cache.neighborhoods_B, missing))
 function neighbors(cache::MemoizedNC{N}, nnds, nodes, bvp, v, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false)) where {N}
     neighborhoods = dir === Val(:F) ? cache.neighborhoods_F : cache.neighborhoods_B
     i = linear_index(v)
-    if i <= 0 || !isassigned(neighborhoods, i)
-        neighborhood = neighbors(nnds, nodes, bvp, v, r, dir=dir, include_controls=include_controls)
-        i > 0 && (neighborhoods[i] = collect_if_not_Array(neighborhood))
-        neighborhood
-    else
-        neighborhoods[i]
+    neighborhood = i > 0 ? neighborhoods[i] : missing
+    if neighborhood === missing
+        neighborhood = collect_if_not_Array(neighbors(nnds, nodes, bvp, v, r,
+                                                      dir=dir, include_controls=include_controls))
+        i > 0 && (neighborhoods[i] = neighborhood)
     end
+    neighborhood
 end
 
 ## OfflineNC
@@ -123,8 +145,11 @@ end
 # Near Neighbor Data Structures
 abstract type NearNeighborDataStructure end
 abstract type MetricNNDS <: NearNeighborDataStructure end    # `using NearestNeighbors` or `using FLANN`
+includes_controls(::Type{<:NearNeighborDataStructure}) = false
 ## NullNNDS (Streaming)
 struct NullNNDS <: NearNeighborDataStructure end
+reset!(::NullNNDS) = nothing
+addstates!(::NullNNDS) = nothing
 function neighbors(nnds::NullNNDS, nodes, bvp, v, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))
     neighbors(nodes, bvp, v, r, dir=dir, include_controls=include_controls)
@@ -148,6 +173,7 @@ function MemoizedNNDS(nodes::ExplicitSampleSet, bvp::SteeringBVP; include_contro
     MemoizedNNDS(bvp_results, memoized_bvp)
 end
 includes_controls(::MemoizedNNDS{S,D,U}) where {S,D,U} = U !== Nothing
+reset!(nnds::MemoizedNNDS) = empty!(nnds.bvp_results)
 function neighbors(nnds::MemoizedNNDS, nodes, bvp, v, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))
     neighbors(nodes, nnds.memoized_bvp, v, r, dir=dir, include_controls=include_controls)
@@ -159,10 +185,23 @@ function neighbors(nodes::ExplicitSampleSet, bvp, v::Int, r;
     neighbors(nodes, bvp, nodes[v], r, dir=dir, include_controls=include_controls, omit=isequal(v))
 end
 function neighbors(nodes::ExplicitSampleSet, bvp, x::State, r;
-                   dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false), omit::Function=always_false)
-    gen = dir === Val(:F) ? ((index=i, bvp(x, nodes[i], r)...) for i in eachindex(nodes) if !omit(i)) :
-                            ((index=i, bvp(nodes[i], x, r)...) for i in eachindex(nodes) if !omit(i))
-    (keep_controls_if(n, include_controls) for n in gen if n.cost <= r)
+                   dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false), omit::F=always_false) where {F}
+    itr = neighbor_info_iterator(nodes, bvp, x, eachindex(nodes), r,
+                                 dir=dir, include_controls=include_controls, omit=omit)
+    Iterators.filter(n -> n.cost <= r, itr)
+    # gen = dir === Val(:F) ? ((index=i, bvp(x, nodes[i], r)...) for i in eachindex(nodes) if !omit(i)) :
+    #                         ((index=i, bvp(nodes[i], x, r)...) for i in eachindex(nodes) if !omit(i))
+    # (keep_controls_if(n, include_controls) for n in gen if n.cost <= r)
+end
+function neighbors(nodes::ExplicitSampleSet, bvp, x::State, r::Nearest;
+                   dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false), omit::F=always_false) where {F}
+    itr = neighbor_info_iterator(nodes, bvp, x, eachindex(nodes), dir=dir, include_controls=include_controls, omit=omit)
+    neighborhood = placeholder_neighborhood(neighbor_info_type(nodes, bvp, include_controls=include_controls), r.k)
+    foreach(n -> update_knn!(neighborhood, n), itr)
+    # for n in itr
+    #     update_knn!(neighborhood, n)
+    # end
+    neighborhood
 end
 
 function neighbors(nodes::TiledSampleSet, bvp, v::TiledIndex, r;
@@ -179,8 +218,8 @@ function neighbors(nodes::TiledSampleSet, bvp, v::TiledIndex, r;
     end
 end
 function neighbors(nodes::TiledSampleSet, bvp, x::State, r;
-                   dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false), omit::Function=always_false,
-                   x0_xf=(dir === Val(:F) ? i -> (x, nodes[i]) : i -> (nodes[i], x)))
+                   dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false), omit::F=always_false,
+                   x0_xf=(dir === Val(:F) ? i -> (x, nodes[i]) : i -> (nodes[i], x))) where {F}
     neighborhood = neighbor_info_type(nodes, bvp, include_controls=include_controls)[]
     close_idx = findclose(nodes, bvp, x, r, dir=dir, omit=omit, x0_xf=x0_xf)
     queue = [close_idx.on_lattice]
@@ -205,9 +244,10 @@ function neighbors(nodes::TiledSampleSet, bvp, x::State, r;
     end
     neighborhood
 end
-function findclose(nodes::TiledSampleSet, bvp, x::State, r; dir::F_or_B=Val(:F), omit::Function=always_false,
-                   x0_xf=(dir === Val(:F) ? i -> (x, nodes[i]) : i -> (nodes[i], x)), cutoff::Int=30)
-    start_lattice_idx = round.(Int, SVector{size(nodes.A,2)}(Matrix(nodes.A)\(x - nodes.b)))    # TODO: \ for non-square A
+function findclose(nodes::TiledSampleSet, bvp, x::State, r; dir::F_or_B=Val(:F), omit::F=always_false,
+                   x0_xf=(dir === Val(:F) ? i -> (x, nodes[i]) : i -> (nodes[i], x)), cutoff::Int=30) where {F}
+    Q, R = qr(nodes.A)    # TODO: \ for non-square A::SMatrix
+    start_lattice_idx = round.(Int, R\Q'*(x - nodes.b))
     sentinel = fill(typemin(Int), typeof(start_lattice_idx))
     queue = [start_lattice_idx, sentinel]
     visited = Set(queue)

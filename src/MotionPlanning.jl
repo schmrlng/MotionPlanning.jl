@@ -9,6 +9,7 @@ using Reexport
 @reexport using StaticArrays
 @reexport using DifferentialDynamicsModels
 using TypeSortedCollections
+using OffsetArrays
 using DataStructures
 using Requires
 using RecipesBase
@@ -46,8 +47,8 @@ function __init__()
     # @require Bullet3
 
     # NearNeighborDataStructure glue code
-    # @require NearestNeighbors
-    # @require FLANN
+    @require NearestNeighbors="b8a86587-4115-5ab1-83bc-aa920d37bbce" include("nearneighbors/nearestneighbors.jl")
+    @require FLANN="4ef67f76-e0de-5105-ac01-03b6482fb4f8" include("nearneighbors/flann.jl")
 end
 
 end # module

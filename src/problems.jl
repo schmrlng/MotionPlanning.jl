@@ -27,11 +27,11 @@ mutable struct MPProblem
 end
 
 @recipe function f(P::MPProblem; dims=(1, 2),
-                                 statespace_color=:black, statespace_alpha=1,
-                                 goal_color=:green, goal_alpha=1, goal_markershape=:star, goal_markersize=10,
-                                 obstacle_color=:red, obstacle_alpha=1,
-                                 show_tree=false, tree_color=:grey, tree_alpha=0.5, tree_markersize=2, tree_edge_waypoints=10,
-                                 solution_color=:blue, solution_alpha=1, solution_markersize=2, solution_edge_waypoints=10)
+                   statespace_color=:black, statespace_alpha=1,
+                   goal_color=:green, goal_alpha=1, goal_markershape=:star, goal_markersize=10,
+                   obstacle_color=:red, obstacle_alpha=1,
+                   show_tree=false, tree_color=:grey, tree_alpha=0.5, tree_markersize=2, tree_edge_waypoints=10,
+                   solution_color=:blue, solution_alpha=1, solution_markersize=2, solution_edge_waypoints=10)
     dims  --> dims
     label --> ""
     x, y = dims
@@ -57,7 +57,7 @@ end
             @series begin
                 color          --> tree_color
                 alpha          --> tree_alpha
-                edge_waypoints --> tree_edge_waypoints
+                num_waypoints  --> tree_edge_waypoints
                 plot_endpoints --> false
                 SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
             end
@@ -78,7 +78,7 @@ end
                 color          --> solution_color
                 alpha          --> solution_alpha
                 markersize     --> solution_markersize
-                edge_waypoints --> solution_edge_waypoints
+                num_waypoints  --> solution_edge_waypoints
                 plot_endpoints --> true
                 SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
             end

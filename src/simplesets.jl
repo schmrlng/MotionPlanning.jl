@@ -1,5 +1,5 @@
 export SimpleConvexSet, AxisAlignedBox, Ball, SetComplement
-export inflate
+export inflate, boundingbox
 
 abstract type SimpleConvexSet end
 
@@ -11,6 +11,7 @@ AxisAlignedBox(lo, hi) = AxisAlignedBox{length(lo),eltype(lo)}(lo, hi)
 Base.in(x, B::AxisAlignedBox{N}) where {N} = all(B.lo[i] <= x[i] <= B.hi[i] for i in 1:N)
 Base.rand(B::AxisAlignedBox) = B.lo + (B.hi - B.lo).*rand(typeof(B.lo))
 inflate(B::AxisAlignedBox, ε) = AxisAlignedBox(B.lo .- ε, B.hi .+ ε)
+boundingbox(B::AxisAlignedBox) = B
 @recipe function f(B::AxisAlignedBox; dims=(1, 2))
     seriestype :=  :shape
     fillcolor  --> :match
@@ -28,6 +29,7 @@ Ball(c, r) = Ball{length(c),eltype(c)}(c, r)
 Base.in(x, B::Ball{N}) where {N} = norm(x - B.c) <= B.r
 Base.rand(B::Ball) = (x = B.c + 2*B.r*(rand(typeof(B.c)) .- 1//2); x in B ? x : rand(B))
 inflate(B::Ball, ε) = Ball(B.c, B.r + ε)
+boundingbox(B::Ball) = AxisAlignedBox(B.c .- B.r, B.c .+ B.r)
 @recipe function f(B::Ball; dims=(1, 2), n=64)
     seriestype :=  :shape
     fillcolor  --> :match

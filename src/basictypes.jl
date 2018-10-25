@@ -14,6 +14,7 @@ BoundedStateSpace(lo::S, hi::S) where {S<:StaticVector} = BoundedStateSpace{S}(A
 BoundedStateSpace(lo, hi) = BoundedStateSpace(AxisAlignedBox(lo, hi))
 Base.in(x, SS::BoundedStateSpace) = x in SS.bounded_set
 Base.rand(SS::BoundedStateSpace{S}) where {S} = convert(S, rand(SS.bounded_set))
+boundingbox(SS::BoundedStateSpace) = boundingbox(SS.bounded_set)
 @recipe function f(SS::BoundedStateSpace; dims=(1, 2)) #, statespace_color=:black, statespace_linecolor=statespace_color)
     dims      --> dims
     linecolor :=  :match
