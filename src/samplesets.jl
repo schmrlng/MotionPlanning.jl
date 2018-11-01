@@ -35,6 +35,14 @@ Base.length(nodes::ExplicitSampleSet) = length(nodes.V)
 Base.getindex(nodes::ExplicitSampleSet, i::Int) = i > 0 ? nodes.V[i] : (i == 0 ? nodes.init : nodes.goal_samples[-i])
 Base.eachindex(nodes::ExplicitSampleSet) = eachindex(nodes.V)
 indextype(nodes::ExplicitSampleSet) = Int
+function addstates!(nodes::ExplicitSampleSet, x::State)
+    n = length(nodes.V)
+    view(push!(nodes.V, x), n+1:n+1)
+end
+function addstates!(nodes::ExplicitSampleSet, xs::AbstractVector{<:State})
+    n = length(nodes.V)
+    view(append!(nodes.V, xs), n+1:n+length(xs))
+end
 
 ## TiledSampleSet
 mutable struct TiledSampleSet{S<:State,M} <: SampleSet
@@ -86,6 +94,9 @@ function Base.getindex(info::LazyNodeInfoArray, i)
     res !== missing && return res    # infers better than ismissing (JuliaLang/julia#27681)
     info[i] = info.initializer(i)
 end
+function Base.push!(info::LazyNodeInfoArray, x)
+    push!(info.main, x)
+end
 function Base.keys(info::LazyNodeInfoArray)
     X = indextype(info)
     Iterators.filter(i -> _getindex(info, i) !== missing,
@@ -94,8 +105,8 @@ end
 
 @inline function node_info_datastructure(nodes::ExplicitSampleSet{S}, ::Type{T}, f=(x -> T());
                                          bounds=AxisAlignedBox(fill(-Inf, S), fill(Inf, S))) where {S,T}
-    LazyNodeInfoArray(Vector{Union{Missing,T}}(undef, length(nodes)),
-                      Vector{Union{Missing,T}}(undef, length(nodes.goal_samples) + 1),
+    LazyNodeInfoArray(Vector{Union{Missing,T}}(missing, length(nodes)),
+                      Vector{Union{Missing,T}}(missing, length(nodes.goal_samples) + 1),
                       i -> f(nodes[i]))
 end
 @inline function node_info_datastructure(nodes::TiledSampleSet{S}, ::Type{T}, f=(x -> T());
@@ -117,8 +128,8 @@ end
         if prod(length.(inds)) > 1e7
             DefaultDict{indextype(nodes),T}(i -> f(nodes[i]), passkey=true)
         else
-            LazyNodeInfoArray(OffsetArray{Union{Missing,T}}(undef, Tuple(inds)..., 1:length(Voff)),
-                              Vector{Union{Missing,T}}(undef, length(nodes.goal_samples) + 1),
+            LazyNodeInfoArray(OffsetArray{Union{Missing,T}}(missing, Tuple(inds)..., 1:length(Voff)),
+                              Vector{Union{Missing,T}}(missing, length(nodes.goal_samples) + 1),
                               i -> f(nodes[i]))
         end
     end

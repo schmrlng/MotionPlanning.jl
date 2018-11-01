@@ -39,7 +39,7 @@ function is_free_edge(CC::CollisionChecker, bvp::GeometricSteering, x0::State, x
 end
 
 # Partial Steering (for RRT and variants)
-function steer_towards(bvp::SteeringBVP{<:Any,Time}, x0, xf, r) # includes GeometricSteering, TODO: interpolate_cost
+function steer_towards(bvp::SteeringBVP{<:Any,Time}, x0, xf, r) # includes GeometricSteering, TODO: bring back cost_waypoint
     c, u = bvp(x0, xf)
     r < c ? propagate(bvp.dynamics, x0, u, r) : xf
 end

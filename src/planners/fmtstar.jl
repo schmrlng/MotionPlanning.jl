@@ -7,7 +7,11 @@ function FMTNodeInfo{X,D}(; is_free=false, status='U', parent=zero(X), cost_to_c
 end
 
 function fmtstar!(P::MPProblem; r, ensure_goal_count=0, compute_full_metadata=true)
-    # Graph Node Setup
+    metadata = @standard_setup!(P)
+    metadata[:planner] = :FMTstar
+    metadata[:r] = r
+
+    # Graph Setup
     !isdefined(P, :graph) && error("TODO")
     setradius!(P.graph, r)
     setinit!(P.graph, P.init)
@@ -15,18 +19,15 @@ function fmtstar!(P::MPProblem; r, ensure_goal_count=0, compute_full_metadata=tr
     compute_init_and_goal_neighbors!(P.graph)
 
     # Solve
-    P.status, P.solution = fmtstar!(P.state_space, P.bvp, P.init, P.goal, P.collision_checker,
-                                    P.graph, r)
+    fmtstar!(P.state_space, P.bvp, P.init, P.goal, P.collision_checker, P.graph, metadata)
 
     # Post-Processing
-    if P.status === :solved && compute_full_metadata
-        metadata = P.solution.metadata
-
-        X = indextype(P.graph)
-        node_info = metadata[:node_info]
-        metadata[:tree] = Dict{X,X}(k => node_info[k].parent for k in keys(node_info) if node_info[k].status != 'U')
+    if compute_full_metadata
+        record_tree!(metadata, metadata[:node_info])
     end
-    P.status, P.solution
+
+    standard_wrapup!(P)
+    P.solution
 end
 
 function fmtstar!(state_space::StateSpace,
@@ -35,22 +36,12 @@ function fmtstar!(state_space::StateSpace,
                   goal::Goal,
                   collision_checker::CollisionChecker,
                   graph::NearNeighborGraph{NeighborInfo{X,D,U}},
-                  r,
+                  metadata::Dict{Symbol,Any},
                   node_info=node_info_datastructure(
                       graph.nodes, FMTNodeInfo{X,D},
                       x -> FMTNodeInfo{X,D}(is_free=is_free_state(collision_checker, x)),
                       bounds=boundingbox(state_space))
                   ) where {X,D,U}
-    tic = time()
-    collision_checker.motion_count[] = collision_checker.edge_count[] = 0    # reset!(collision_checker)
-
-    if !is_free_state(collision_checker, init)
-        # @warn("Initial state is infeasible!")
-        status = :infeasible
-        solution = MPSolution(status, D(Inf), time() - tic, Dict{Symbol,Any}())
-        return status, solution
-    end
-
     is_unvisited = n -> (ni = node_info[n.index]; ni !== missing && ni.is_free && ni.status == 'U')
     is_open      = n -> (ni = node_info[n.index]; ni !== missing && ni.status == 'O')
 
@@ -60,7 +51,6 @@ function fmtstar!(state_space::StateSpace,
 
     while !(graph[z] in goal)
         for (x, _, _) in neighbors(is_unvisited, graph, z, dir=Val(:F))
-            # @show (z, x)
             y_min, c_min, u_min = mapreduce(n -> (index=n.index,
                                                   cost=node_info[n.index].cost_to_come + n.cost,
                                                   controls=n.controls),
@@ -75,25 +65,7 @@ function fmtstar!(state_space::StateSpace,
         isempty(open_queue) ? break : z = dequeue!(open_queue)
     end
 
-    solution_nodes = [z]
-    costs_to_come = [node_info[z].cost_to_come]
-    while linear_index(solution_nodes[1]) != 0
-        pushfirst!(solution_nodes, node_info[solution_nodes[1]].parent)
-        pushfirst!(costs_to_come, node_info[solution_nodes[1]].cost_to_come)
-    end
-
-    status = graph[z] in goal ? :solved : :failed
-    solution_metadata = Dict{Symbol,Any}(
-        :r => r,
-        :motion_checks => collision_checker.motion_count[],
-        :edge_checks => collision_checker.edge_count[],
-        :cost => costs_to_come[end],
-        :costs_to_come => costs_to_come,
-        :planner => :FMTstar,
-        :solved => status === :solved,
-        :solution_nodes => solution_nodes,
-        :node_info => node_info
-    )
-    solution = MPSolution(status, costs_to_come[end], time() - tic, solution_metadata)
-    status, solution
+    metadata[:solved] = graph[z] in goal
+    record_tree_solution!(metadata, node_info, z, X(0))
+    nothing
 end

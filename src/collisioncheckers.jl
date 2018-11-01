@@ -38,6 +38,7 @@ struct CollisionChecker{C,O,R<:RobotCollisionBody,S2C}
 end
 const ContinuousCollisionChecker{O,R,S2C} = CollisionChecker{true,O,R,S2C}
 const DiscreteCollisionChecker{O,R,S2C}   = CollisionChecker{false,O,R,S2C}
+reset!(CC::CollisionChecker) = (CC.motion_count[] = CC.edge_count[] = 0)
 @recipe function f(CC::CollisionChecker; dims=(1, 2))#, obstacle_color=:red, obstacle_alpha=1)
     dims           --> dims
     # obstacle_color --> obstacle_color
@@ -103,7 +104,7 @@ function DiscreteCollisionChecker(_obstacles, robot::R=PointRobot(), state2confi
     CollisionChecker{false,typeof(obstacles),R,S2C}(obstacles, robot, state2config, Ref(0), Ref(0))
 end
 
-# Super basic collision checking; `using SeparatingAxisTheorem2D` or ... to load more advanced capabilities
+# Super basic collision checking; `import SeparatingAxisTheorem2D` or ... to load more advanced capabilities
 intersecting(X::Union{SimpleConvexSet,SetComplement}, x) = x in X
 
 function sweep_intersecting(B::AxisAlignedBox{N}, x0, xf) where {N}

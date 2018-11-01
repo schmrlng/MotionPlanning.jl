@@ -1,5 +1,5 @@
 export SimpleConvexSet, AxisAlignedBox, Ball, SetComplement
-export inflate, boundingbox
+export inflate, boundingbox, volume
 
 abstract type SimpleConvexSet end
 
@@ -12,6 +12,7 @@ Base.in(x, B::AxisAlignedBox{N}) where {N} = all(B.lo[i] <= x[i] <= B.hi[i] for 
 Base.rand(B::AxisAlignedBox) = B.lo + (B.hi - B.lo).*rand(typeof(B.lo))
 inflate(B::AxisAlignedBox, ε) = AxisAlignedBox(B.lo .- ε, B.hi .+ ε)
 boundingbox(B::AxisAlignedBox) = B
+volume(B::AxisAlignedBox) = prod(B.hi - B.lo)
 @recipe function f(B::AxisAlignedBox; dims=(1, 2))
     seriestype :=  :shape
     fillcolor  --> :match
@@ -30,6 +31,10 @@ Base.in(x, B::Ball{N}) where {N} = norm(x - B.c) <= B.r
 Base.rand(B::Ball) = (x = B.c + 2*B.r*(rand(typeof(B.c)) .- 1//2); x in B ? x : rand(B))
 inflate(B::Ball, ε) = Ball(B.c, B.r + ε)
 boundingbox(B::Ball) = AxisAlignedBox(B.c .- B.r, B.c .+ B.r)
+volume(::Type{Ball{N,T}}) where {N,T} = (k = div(N, 2); iseven(N) ? T(π)^k/factorial(k) :
+                                                                    2*factorial(k)*(4*T(π))^k/factorial(N))
+volume(::Type{Ball{N}}) where {N} = volume(Ball{N,Float64})
+volume(B::Ball{N,T}) where {N,T} = volume(Ball{N,T})*B.r^N
 @recipe function f(B::Ball; dims=(1, 2), n=64)
     seriestype :=  :shape
     fillcolor  --> :match
