@@ -37,3 +37,7 @@ mat2vecs(::Type{S}, M::Matrix) where {S<:AbstractArray} = [convert(S, M[:,i]) fo
 # Ensure an iterable is an Array
 @inline collect_if_not_Array(x::Array) = x
 @inline collect_if_not_Array(x) = collect(x)
+
+# Default filtering predicates
+@inline always_false(::Any) = false
+@inline always_true(::Any) = true

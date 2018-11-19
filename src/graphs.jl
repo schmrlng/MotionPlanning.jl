@@ -74,7 +74,7 @@ default_NN_data_structure(nodes, bvp, include_controls) = default_NN_data_struct
 default_NN_data_structure(nodes, bvp) = NullNNDS()
 
 Base.getindex(G::NearNeighborGraph, i) = G.nodes[i]
-# Base.getindex(G::NearNeighborGraph, i, j) = SteeringEdge
+Base.getindex(G::NearNeighborGraph, i, j) = SteeringEdge(G.bvp, G[i], G[j])    # TODO: use cached controls if applicable
 
 setradius!(G::NearNeighborGraph{<:Any,<:Any,<:Any,<:RefValue}, r) = (G.r[] != r && reset!(G.edge_cache); G.r[] = r)
 setradius!(G::NearNeighborGraph{<:Any,<:Any,<:Any,Nothing},    r) = error("Cannot setradius! for variable radius graph")

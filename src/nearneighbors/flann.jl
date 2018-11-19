@@ -9,7 +9,9 @@ mutable struct FLANNNNDS{T} <: MetricNNDS
 end
 function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neighbor_count=1000) where {S}
     T = eltype(S)
-    params = FLANN.FLANNParameters(algorithm=FLANN.FLANN_INDEX_KDTREE_SINGLE, checks=-1, trees=1)
+    # FLANN_INDEX_KDTREE_SINGLE addpoints! is inefficient
+    # FLANN_INDEX_KDTREE is inaccurate (though it seems FLANN_INDEX_KMEANS is too?)
+    params = FLANN.FLANNParameters(algorithm=FLANN.FLANN_INDEX_KMEANS, checks=-1)
     inds  = fill(Cint(0), max_neighbor_count)
     dists = fill(T(0), max_neighbor_count)
     nnds = FLANNNNDS(FLANN.flann(vecs2mat(nodes.V), params, FLANN.Euclidean()),
@@ -28,7 +30,7 @@ function addstates!(nnds::FLANNNNDS{T}, v::SubArray{<:State})  where {T}   # ass
         FLANN.addpoints!(nnds.index, vecs2mat(v))
     else
         FLANN.close(nnds.index)
-        params = FLANN.FLANNParameters(algorithm=FLANN.FLANN_INDEX_KDTREE_SINGLE, checks=-1, trees=1)
+        params = FLANN.FLANNParameters(algorithm=FLANN.FLANN_INDEX_KMEANS, checks=-1)
         nnds.index = FLANN.flann(vecs2mat(v.parent), params, FLANN.Euclidean())
         nnds.dataptr = ptr
     end

@@ -32,8 +32,8 @@ function record_tree_solution!(metadata, node_info, z, terminal_index)
     end
 end
 
-function record_tree!(metadata, node_info)
-    metadata[:tree] = Dict(k => node_info[k].parent for k in keys(node_info))
+function record_tree!(metadata, node_info; omit::F=always_false) where {F}
+    metadata[:tree] = Dict(k => node_info[k].parent for k in keys(node_info) if !omit(k => node_info[k]))
 end
 
 function standard_wrapup!(P)
@@ -45,5 +45,5 @@ function standard_wrapup!(P)
 end
 
 include("planners/fmtstar.jl")
-# include("planners/rrt.jl")
-# include("planners/rrtstar.jl")
+include("planners/rrt.jl")
+include("planners/rrtstar.jl")

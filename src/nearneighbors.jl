@@ -6,8 +6,6 @@ export includes_controls, neighbor_info_type, neighbors
 # Utilities
 const F_or_B = Union{Val{:F},Val{:B}}
 const BoolVal = Union{Val{true},Val{false}}
-@inline always_false(::SampleIndex) = false    # used as a filtering predicate
-@inline always_true(::SampleIndex) = true
 @inline keep_controls_if(nt::NamedTuple, cond::BoolVal) = cond === Val(true) ? nt : (nt..., controls=nothing)
 # @inline lattice_neighbors(v::SVector{D}) where {D} = (setindex(v, v[i] + j, i) for i in 1:D for j in (-1, 1))
 @inline lattice_neighbors(v::SVector{D}) where {D} = (v + SVector(Tuple(I)) - SVector(ntuple(i -> 2, D)) for
@@ -68,7 +66,7 @@ struct Nearest
 end
 placeholder_neighborhood(::Type{T}, k) where {T<:NeighborInfo} = Vector{Union{Missing,T}}(missing, k)
 function update_knn!(neighborhood, n::NeighborInfo{X,D,U}) where {X,D,U}
-    if ismissing(neighborhood[1]) || n.cost < neighborhood[1].cost
+    if neighborhood[1] === missing || n.cost < neighborhood[1].cost
         neighborhood[1] = n
         DataStructures.percolate_down!(neighborhood, 1, Base.Order.By(x -> x === missing ? D(-Inf) : -x.cost))
     end

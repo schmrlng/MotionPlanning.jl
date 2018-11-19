@@ -53,35 +53,29 @@ end
         P.collision_checker
     end
     if show_tree && isdefined(P, :solution) && :tree in keys(P.solution.metadata)
-        for (j, i) in P.solution.metadata[:tree]    # tree pairs are child => parent
-            @series begin
-                color          --> tree_color
-                alpha          --> tree_alpha
-                num_waypoints  --> tree_edge_waypoints
-                plot_endpoints --> false
-                SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
-            end
-        end
         @series begin
-            seriestype  --> :scatter
-            color       --> tree_color
-            alpha       --> tree_alpha
-            markersize  --> tree_markersize
-            delete!(plotattributes, :dims)
-            pts = [P.collision_checker.state2config(P.graph[i]) for i in keys(P.solution.metadata[:tree])]
-            [p[x] for p in pts], [p[y] for p in pts]
+            color          --> tree_color
+            alpha          --> tree_alpha
+            markersize     --> tree_markersize
+            num_waypoints  --> tree_edge_waypoints
+            state2config   --> P.collision_checker.state2config
+            # config2viz     --> P.collision_checker.config2viz    # TODO
+            plot_endpoints --> true
+            plot_x0        --> false
+            plot_xf        --> true
+            [P.graph[i, j] for (j, i) in P.solution.metadata[:tree]]    # tree `Pair`s are child => parent
         end
     end
     if P.status === :solved
-        for (i, j) in pairwise(P.solution.metadata[:solution_nodes])
-            @series begin
-                color          --> solution_color
-                alpha          --> solution_alpha
-                markersize     --> solution_markersize
-                num_waypoints  --> solution_edge_waypoints
-                plot_endpoints --> true
-                SteeringEdge(P.collision_checker.state2config, P.bvp, P.graph[i], P.graph[j])
-            end
+        @series begin
+            color          --> solution_color
+            alpha          --> solution_alpha
+            markersize     --> solution_markersize
+            num_waypoints  --> solution_edge_waypoints
+            state2config   --> P.collision_checker.state2config
+            # config2viz     --> P.collision_checker.config2viz    # TODO
+            plot_endpoints --> true
+            [P.graph[i, j] for (i, j) in pairwise(P.solution.metadata[:solution_nodes])]
         end
     end
 end

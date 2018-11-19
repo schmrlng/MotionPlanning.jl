@@ -23,7 +23,7 @@ function fmtstar!(P::MPProblem; r, ensure_goal_count=0, compute_full_metadata=tr
 
     # Post-Processing
     if compute_full_metadata
-        record_tree!(metadata, metadata[:node_info])
+        record_tree!(metadata, metadata[:node_info], omit=(((k, info),) -> info.status == 'U'))
     end
 
     standard_wrapup!(P)

@@ -45,27 +45,51 @@ function steer_towards(bvp::SteeringBVP{<:Any,Time}, x0, xf, r) # includes Geome
 end
 
 # Plotting
-struct SteeringEdge{BVP,S,S2C,U}
-    state2config::S2C
+struct SteeringEdge{BVP,S,U}
     bvp::BVP
     x0::S
     xf::S
     controls::U
 end
-SteeringEdge(state2config, bvp, x0, xf) = SteeringEdge(state2config, bvp, x0, xf, bvp(x0, xf).controls)
-@recipe function f(E::SteeringEdge; dims=(1, 2), num_waypoints=10, plot_endpoints=true) # , edge_color=:grey, edge_alpha=1, edge_markershape=:none
-    # color :=  edge_color
-    # alpha :=  edge_alpha
-    # label --> ""
+SteeringEdge(bvp::BVP, x0::S, xf::S, ::Nothing) where {BVP,S} = SteeringEdge(bvp, x0, xf, bvp(x0, xf).controls)
+SteeringEdge(bvp, x0, xf) = SteeringEdge(bvp, x0, xf, nothing)
+@recipe function f(E::SteeringEdge; state2config=identity, config2viz=identity,
+                                    dims=(1, 2), num_waypoints=10, plot_endpoints=true,
+                                    plot_x0=true, plot_xf=true)
+    state2config   --> state2config
+    config2viz     --> config2viz
+    dims           --> dims
+    num_waypoints  --> num_waypoints
+    plot_endpoints --> plot_endpoints
+    plot_x0        --> plot_x0
+    plot_xf        --> plot_xf
+    SVector(E)
+end
+
+@recipe function f(edges::AbstractVector{<:SteeringEdge}; state2config=identity, config2viz=identity,
+                                                          dims=(1, 2), num_waypoints=10, plot_endpoints=true,
+                                                          plot_x0=true, plot_xf=true)
     x, y = dims
-    plot_endpoints && @series begin
+    plot_endpoints && plot_x0 && @series begin
         seriestype  := :scatter
-        # markershape := edge_markershape
-        q0, qf = E.state2config(E.x0), E.state2config(E.xf)
-        SVector(q0[x], qf[x]), SVector(q0[y], qf[y])
+        pts = [state2config(e.x0) for e in edges]
+        [p[x] for p in pts], [p[y] for p in pts]
+    end
+    plot_endpoints && plot_xf && @series begin
+        seriestype  := :scatter
+        pts = [state2config(e.xf) for e in edges]
+        [p[x] for p in pts], [p[y] for p in pts]
     end
     @series begin
-        pts = waypoints(E.bvp.dynamics, E.x0, E.controls, num_waypoints)
-        [p[x] for p in pts], [p[y] for p in pts]
+        X = Union{Missing,Float64}[]
+        Y = Union{Missing,Float64}[]
+        for e in edges
+            pts = waypoints(e.bvp.dynamics, e.x0, e.controls, num_waypoints)
+            append!(X, [p[x] for p in pts])
+            append!(Y, [p[y] for p in pts])
+            push!(X, missing)
+            push!(Y, missing)
+        end
+        X, Y
     end
 end
