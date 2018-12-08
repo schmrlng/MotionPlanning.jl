@@ -62,14 +62,14 @@ function rrtstar!(state_space::StateSpace,
     i = 1
     while i < max_sample_count && time() - planner_start_time < time_limit
         x_rand = rand_free_state(collision_checker, rand() < goal_bias ? goal : state_space)
-        v_near = first(neighbors(graph, x_rand, Nearest(1), dir=Val(:B))).index    # TODO: include_controls=Val(true)
+        v_near, cost, controls = first(neighbors(graph, x_rand, Nearest(1), dir=Val(:B)))
         x_near = graph[v_near]
-        x_new  = steer_towards(bvp, x_near, x_rand, steering_eps)
-        if is_free_edge(collision_checker, bvp, x_near, x_new)    # more TODO
+        x_new, cost, controls = steer_towards(bvp, x_near, x_rand, steering_eps, cost, controls)
+        if is_free_edge(collision_checker, bvp, x_near, x_new, controls)
             ri = min(D(r(i)), steering_eps)
             i += 1
             addstates!(graph, x_new)
-            Δc_min = bvp(x_near, x_new).cost
+            Δc_min = cost
             v_min, c_min = v_near, node_info[v_near].cost_to_come + Δc_min
             for (v, Δc, u) in neighbors(graph, i, ri, dir=Val(:B))
                 c = node_info[v].cost_to_come + Δc
@@ -110,6 +110,6 @@ function rrtstar!(state_space::StateSpace,
         end
     end
     metadata[:solved] = solved
-    record_tree_solution!(metadata, node_info, v_opt, 0)
+    record_solution!(metadata, node_info, v_opt, 0)
     nothing
 end

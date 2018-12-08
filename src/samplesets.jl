@@ -11,6 +11,10 @@ TiledIndex{D}(i::Int) where {D} = TiledIndex(zero(SVector{D,Int}), i)
 (::Type{<:TiledIndex})(tup::NTuple{N,Int}) where {N} = TiledIndex{N-1}(reverse(Base.tail(reverse(tup))), last(tup))
 (::Type{<:TiledIndex})(ci::CartesianIndex) = TiledIndex(Tuple(ci))
 Base.zero(::Type{TiledIndex{D}}) where {D} = TiledIndex{D}(0)
+@inline Base.iterate(i::TiledIndex) = (i, nothing)
+@inline Base.iterate(i::TiledIndex, ::Any) = nothing
+@inline Base.eltype(::Type{TI}) where {TI<:TiledIndex} = TI
+@inline Base.length(::TiledIndex) = 1
 function Base.hash(x::TiledIndex, h::UInt=zero(UInt))
     hash(reduce((r, x) -> (1 << 19 - 1)*r + x, x.on_lattice .% UInt), x.off_lattice + h)
     # hash((x.on_lattice.data..., x.off_lattice), h)
@@ -18,6 +22,7 @@ function Base.hash(x::TiledIndex, h::UInt=zero(UInt))
 end
 zero_lattice_component(i::TiledIndex{D}) where {D} = TiledIndex(zero(SVector{D,Int}), i.off_lattice)
 shift_lattice_component(i::TiledIndex, shift) = TiledIndex(i.on_lattice + shift, i.off_lattice)
+
 const SampleIndex = Union{Int,TiledIndex}
 @inline linear_index(i::Int) = i
 @inline linear_index(i::TiledIndex) = i.off_lattice

@@ -7,7 +7,7 @@ mutable struct FLANNNNDS{T} <: MetricNNDS
     inds::Vector{Cint}
     dists::Vector{T}
 end
-function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neighbor_count=1000) where {S}
+function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neighbor_count=10000) where {S}
     T = eltype(S)
     # FLANN_INDEX_KDTREE_SINGLE addpoints! is inefficient
     # FLANN_INDEX_KDTREE is inaccurate (though it seems FLANN_INDEX_KMEANS is too?)

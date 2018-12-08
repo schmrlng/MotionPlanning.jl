@@ -15,11 +15,8 @@ ConfigSpaceObstacle(set::S) where {S} = Obstacle{:configspace,S}(set)
 WorkspaceObstacle(set::S) where {S}   = Obstacle{:workspace,S}(set)
 intersecting(o::Obstacle, x) = intersecting(o.set, x)
 sweep_intersecting(o::Obstacle, x0, xf) = sweep_intersecting(o.set, x0, xf)
-@recipe function f(o::Obstacle; dims=(1, 2))#, obstacle_color=:red, obstacle_alpha=1)
-    dims  --> dims
-    # color :=  obstacle_color
-    # alpha :=  obstacle_alpha
-    # label --> ""
+@recipe function f(o::Obstacle; dims=(1, 2))
+    dims --> dims
     o.set
 end
 
@@ -39,10 +36,8 @@ end
 const ContinuousCollisionChecker{O,R,S2C} = CollisionChecker{true,O,R,S2C}
 const DiscreteCollisionChecker{O,R,S2C}   = CollisionChecker{false,O,R,S2C}
 reset!(CC::CollisionChecker) = (CC.motion_count[] = CC.edge_count[] = 0)
-@recipe function f(CC::CollisionChecker; dims=(1, 2))#, obstacle_color=:red, obstacle_alpha=1)
-    dims           --> dims
-    # obstacle_color --> obstacle_color
-    # obstacle_alpha --> obstacle_alpha
+@recipe function f(CC::CollisionChecker; dims=(1, 2))
+    dims --> dims
     foreach(o -> @series(begin o end), CC.obstacles)
 end
 

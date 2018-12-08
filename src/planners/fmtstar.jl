@@ -66,6 +66,6 @@ function fmtstar!(state_space::StateSpace,
     end
 
     metadata[:solved] = graph[z] in goal
-    record_tree_solution!(metadata, node_info, z, X(0))
+    record_solution!(metadata, node_info, z, X(0))
     nothing
 end

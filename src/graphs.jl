@@ -63,10 +63,9 @@ function NearNeighborGraph(nodes::SampleSet,
     NearNeighborGraph{T}(nodes, bvp, r, edge_cache, NN_data_structure, init_neighbors, goal_neighbors)
 end
 neighbor_info_type(G::NearNeighborGraph{T}) where {T} = T
-indextype(G::NearNeighborGraph) = indextype(G.nodes)
-costtype(G::NearNeighborGraph) = costtype(neighbor_info_type(G))
-controlstype(G::NearNeighborGraph) = controlstype(neighbor_info_type(G))
-includes_controls(G::NearNeighborGraph) = includes_controls(neighbor_info_type(G))
+for f in (:indextype, :costtype, :controlstype, :includes_controls)
+    @eval $f(G::NearNeighborGraph{T}) where {T} = $f(T)
+end
 
 default_edge_cache(nodes, bvp, include_controls, ::Val{:variable}) = StreamingNC()
 default_edge_cache(nodes, bvp, include_controls, ::Any) = MemoizedNC(nodes, bvp, include_controls=include_controls)
@@ -96,7 +95,7 @@ function compute_init_and_goal_neighbors!(G::NearNeighborGraph{NeighborInfo{X,D,
     foreach(empty!, G.goal_neighbors)
     G.init_neighbors[1] = reverse_neighbor_dict(X(0), neighbors(G, X(0), dir=Val(:F)), NeighborInfo{X,D,U})
     for i in eachindex(G.goal_neighbors)
-        bvp_result = keep_controls_if(G.bvp(G[X(0)], G[X(-i)]), Val(U !== Nothing))
+        bvp_result = keep_controls_if(G.bvp(G[X(0)], G[X(-i)]), Val(includes_controls(G)))
         bvp_result.cost <= G.r[] && (G.init_neighbors[1][X(-i)] = (index=X(0), bvp_result...))
         G.goal_neighbors[i] = reverse_neighbor_dict(X(-i), neighbors(G, X(-i), dir=Val(:B)), NeighborInfo{X,D,U})
     end
@@ -168,4 +167,4 @@ end
 # TODOs
 # - add `dirty` flag to track NearNeighborGraph init_neighbors/goal_neighbors
 # - also, enforce compute_init_and_goal_neighbors! if R<:RefValue{<:Number} -- otherwise, brittleness
-# - NeighborInfo U should maybe be <: Union{...,Missing} instead of Union{...,Nothing}
+# ✓ NeighborInfo U should maybe be <: Union{...,Missing} instead of Union{...,Nothing}

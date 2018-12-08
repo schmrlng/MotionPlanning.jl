@@ -6,7 +6,7 @@ export includes_controls, neighbor_info_type, neighbors
 # Utilities
 const F_or_B = Union{Val{:F},Val{:B}}
 const BoolVal = Union{Val{true},Val{false}}
-@inline keep_controls_if(nt::NamedTuple, cond::BoolVal) = cond === Val(true) ? nt : (nt..., controls=nothing)
+@inline keep_controls_if(nt::NamedTuple, cond::BoolVal) = cond === Val(true) ? nt : (nt..., controls=missing)
 # @inline lattice_neighbors(v::SVector{D}) where {D} = (setindex(v, v[i] + j, i) for i in 1:D for j in (-1, 1))
 @inline lattice_neighbors(v::SVector{D}) where {D} = (v + SVector(Tuple(I)) - SVector(ntuple(i -> 2, D)) for
                                                       I in CartesianIndices(ntuple(i -> 3, D)) if
@@ -17,14 +17,14 @@ const BoolVal = Union{Val{true},Val{false}}
 # Neighborhoods
 const NeighborInfo{X<:SampleIndex,D,U} = NamedTuple{(:index,:cost,:controls),Tuple{X,D,U}}
 const Neighborhood{X<:SampleIndex,D,U} = AbstractVector{NeighborInfo{X,D,U}}
-includes_controls( ::Type{  NeighborInfo{X,D,U}}) where {X,D,U} = U !== Nothing
-includes_controls( ::Type{<:Neighborhood{X,D,U}}) where {X,D,U} = U !== Nothing
+includes_controls( ::Type{  NeighborInfo{X,D,U}}) where {X,D,U} = U !== Missing
+includes_controls( ::Type{<:Neighborhood{X,D,U}}) where {X,D,U} = U !== Missing
 neighbor_info_type(::Type{<:Neighborhood{X,D,U}}) where {X,D,U} = NeighborInfo{X,D,U}
 indextype(   ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = X
 costtype(    ::Type{NeighborInfo{X,D,U}}) where {X,D,U} = D
 controlstype(::Type{NeighborInfo{X,D,U}}) where {X,D,U} = U
 function _neighbor_info_type(::Type{X}, ::Type{NamedTuple{M,Tuple{D,U}}}, include_controls::BoolVal) where {X,M,D,U}
-    include_controls === Val(true) ? NeighborInfo{X,D,U} : NeighborInfo{X,D,Nothing}
+    include_controls === Val(true) ? NeighborInfo{X,D,U} : NeighborInfo{X,D,Missing}
 end
 function neighbor_info_type(nodes::SampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false))
     X = indextype(nodes)
@@ -57,7 +57,7 @@ function PackedNeighborhoods(neighborhoods::AbstractVector{<:Neighborhood})
 end
 Base.length(PN::PackedNeighborhoods) = length(PN.neighborhoods)
 Base.getindex(PN::PackedNeighborhoods, i::Int) = PN.neighborhoods[i]
-includes_controls( ::Type{<:PackedNeighborhoods{X,D,U}}) where {X,D,U} = U !== Nothing
+includes_controls( ::Type{<:PackedNeighborhoods{X,D,U}}) where {X,D,U} = U !== Missing
 neighbor_info_type(::Type{<:PackedNeighborhoods{X,D,U}}) where {X,D,U} = NeighborInfo{X,D,U}
 
 # k-Nearest Neighbors
@@ -145,6 +145,7 @@ abstract type MetricNNDS <: NearNeighborDataStructure end    # `import NearestNe
 includes_controls(::Type{<:NearNeighborDataStructure}) = false
 ## NullNNDS (Streaming)
 struct NullNNDS <: NearNeighborDataStructure end
+NullNNDS(nodes::SampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false)) = NullNNDS()
 reset!(::NullNNDS) = nothing
 addstates!(::NullNNDS, X) = nothing
 function neighbors(nnds::NullNNDS, nodes, bvp, v_or_x, r;
@@ -160,7 +161,7 @@ end
 function MemoizedNNDS(nodes::ExplicitSampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false))
     S = typeof(nodes.init)
     D = typeof(bvp(nodes.init, nodes.init).cost)
-    U = include_controls === Val(true) ? typeof(bvp(nodes.init, nodes.init).controls) : Nothing
+    U = include_controls === Val(true) ? typeof(bvp(nodes.init, nodes.init).controls) : Missing
     bvp_results = Dict{Tuple{S,S},NamedTuple{(:cost,:controls),Tuple{D,U}}}()
     memoized_bvp = (x0, xf, cost_bound) -> begin    # TODO: check if closure performance is disastrous
         get!(bvp_results, (x0, xf)) do              #       also, make subtype of SteeringBVP?
@@ -169,7 +170,7 @@ function MemoizedNNDS(nodes::ExplicitSampleSet, bvp::SteeringBVP; include_contro
     end
     MemoizedNNDS(bvp_results, memoized_bvp)
 end
-includes_controls(::MemoizedNNDS{S,D,U}) where {S,D,U} = U !== Nothing
+includes_controls(::MemoizedNNDS{S,D,U}) where {S,D,U} = U !== Missing
 reset!(nnds::MemoizedNNDS) = empty!(nnds.bvp_results)
 function neighbors(nnds::MemoizedNNDS, nodes, bvp, v_or_x, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))

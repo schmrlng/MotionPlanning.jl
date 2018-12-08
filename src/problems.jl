@@ -30,7 +30,7 @@ end
                    statespace_color=:black, statespace_alpha=1,
                    goal_color=:green, goal_alpha=1, goal_markershape=:star, goal_markersize=10,
                    obstacle_color=:red, obstacle_alpha=1,
-                   show_tree=false, tree_color=:grey, tree_alpha=0.5, tree_markersize=2, tree_edge_waypoints=10,
+                   show_graph=false, graph_color=:grey, graph_alpha=0.5, graph_markersize=2, graph_edge_waypoints=10,
                    solution_color=:blue, solution_alpha=1, solution_markersize=2, solution_edge_waypoints=10)
     dims  --> dims
     label --> ""
@@ -52,18 +52,20 @@ end
         alpha --> obstacle_alpha
         P.collision_checker
     end
-    if show_tree && isdefined(P, :solution) && :tree in keys(P.solution.metadata)
+    if show_graph && isdefined(P, :solution) && :graph in keys(P.solution.metadata)
         @series begin
-            color          --> tree_color
-            alpha          --> tree_alpha
-            markersize     --> tree_markersize
-            num_waypoints  --> tree_edge_waypoints
+            color          --> graph_color
+            alpha          --> graph_alpha
+            markersize     --> graph_markersize
+            num_waypoints  --> graph_edge_waypoints
             state2config   --> P.collision_checker.state2config
             # config2viz     --> P.collision_checker.config2viz    # TODO
             plot_endpoints --> true
             plot_x0        --> false
             plot_xf        --> true
-            [P.graph[i, j] for (j, i) in P.solution.metadata[:tree]]    # tree `Pair`s are child => parent
+            graph = P.solution.metadata[:graph]
+            graph isa ForwardAdjacencyDict ? [P.graph[i, j] for (i, js) in P.solution.metadata[:graph].d for j in js] :
+                                             [P.graph[i, j] for (j, is) in P.solution.metadata[:graph].d for i in is]
         end
     end
     if P.status === :solved
