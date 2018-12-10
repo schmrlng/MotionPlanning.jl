@@ -1,5 +1,5 @@
 export Nearest, NeighborInfo, Neighborhood, PackedNeighborhoods
-export NearNeighborDataStructure, MetricNNDS, NullNNDS, MemoizedNNDS
+export NearNeighborDataStructure, MetricNNDS, NullNNDS, MemoizedNNDS, use_NullNNDS, use_MemoizedNNDS
 export NeighborhoodCache, StreamingNC, MemoizedNC, OfflineNC
 export includes_controls, neighbor_info_type, neighbors
 
@@ -26,7 +26,7 @@ controlstype(::Type{NeighborInfo{X,D,U}}) where {X,D,U} = U
 function _neighbor_info_type(::Type{X}, ::Type{NamedTuple{M,Tuple{D,U}}}, include_controls::BoolVal) where {X,M,D,U}
     include_controls === Val(true) ? NeighborInfo{X,D,U} : NeighborInfo{X,D,Missing}
 end
-function neighbor_info_type(nodes::SampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false))
+function neighbor_info_type(nodes::SampleSet, bvp; include_controls::BoolVal=Val(false))
     X = indextype(nodes)
     BVP = typeof(bvp(nodes.init, nodes.init))
     _neighbor_info_type(X, BVP, include_controls)
@@ -145,7 +145,8 @@ abstract type MetricNNDS <: NearNeighborDataStructure end    # `import NearestNe
 includes_controls(::Type{<:NearNeighborDataStructure}) = false
 ## NullNNDS (Streaming)
 struct NullNNDS <: NearNeighborDataStructure end
-NullNNDS(nodes::SampleSet, bvp::SteeringBVP; include_controls::BoolVal=Val(false)) = NullNNDS()
+NullNNDS(nodes::SampleSet, bvp::SteeringBVP; kwargs...) = NullNNDS()
+use_NullNNDS() = (default_NN_data_structure_type[] = :NullNNDS)
 reset!(::NullNNDS) = nothing
 addstates!(::NullNNDS, X) = nothing
 function neighbors(nnds::NullNNDS, nodes, bvp, v_or_x, r;
@@ -163,15 +164,17 @@ function MemoizedNNDS(nodes::ExplicitSampleSet, bvp::SteeringBVP; include_contro
     D = typeof(bvp(nodes.init, nodes.init).cost)
     U = include_controls === Val(true) ? typeof(bvp(nodes.init, nodes.init).controls) : Missing
     bvp_results = Dict{Tuple{S,S},NamedTuple{(:cost,:controls),Tuple{D,U}}}()
-    memoized_bvp = (x0, xf, cost_bound) -> begin    # TODO: check if closure performance is disastrous
-        get!(bvp_results, (x0, xf)) do              #       also, make subtype of SteeringBVP?
+    memoized_bvp = (x0, xf, cost_bound=D(Inf)) -> begin    # TODO: check if closure performance is disastrous
+        get!(bvp_results, (x0, xf)) do                     #       also, make subtype of SteeringBVP?
             keep_controls_if(bvp(x0, xf, cost_bound), include_controls)
         end
     end
     MemoizedNNDS(bvp_results, memoized_bvp)
 end
+use_MemoizedNNDS() = (default_NN_data_structure_type[] = :MemoizedNNDS)
 includes_controls(::MemoizedNNDS{S,D,U}) where {S,D,U} = U !== Missing
 reset!(nnds::MemoizedNNDS) = empty!(nnds.bvp_results)
+addstates!(::MemoizedNNDS, X) = nothing
 function neighbors(nnds::MemoizedNNDS, nodes, bvp, v_or_x, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))
     neighbors(nodes, nnds.memoized_bvp, v_or_x, r, dir=dir, include_controls=include_controls)

@@ -6,13 +6,20 @@ function update_descendant_costs_to_come!(node_info, v, Δc)
     foreach(w -> update_descendant_costs_to_come!(node_info, w, Δc), v_info.children)
 end
 
+function rrtstar_default_radius_function(state_space::StateSpace, bvp::GeometricSteering, radius_scale_factor=1)
+    d = dimension(state_space)
+    γ = radius_scale_factor*(2*(1 + 1/d)*volume(state_space)/volume(Ball{d}))^(1/d)
+    i -> γ*(log(i)/i)^(1/d)
+end
+function rrtstar_default_radius_function(state_space::StateSpace, bvp::SteeringBVP)
+    error("rrtstar_default_radius_function not implemented yet for SteeringBVP type $(typeof(bvp))")
+end
+
 function rrtstar!(P::MPProblem; max_sample_count=Inf,
                                 time_limit=Inf,
                                 steering_eps=0.1,    # TODO: compute from P.state_space dims?
                                 radius_scale_factor=1,
-                                d=length(P.init),
-                                gamma=(2*(1 + 1/d)*volume(P.state_space)/volume(Ball{d}))^(1/d),
-                                r=(i -> radius_scale_factor*gamma*(log(i)/i)^(1/d)),
+                                r=rrtstar_default_radius_function(P.state_space, P.bvp, radius_scale_factor),
                                 goal_bias=0.05,
                                 compute_full_metadata=true)
     metadata = @standard_setup!(P)
@@ -23,8 +30,6 @@ function rrtstar!(P::MPProblem; max_sample_count=Inf,
     metadata[:time_limit] = time_limit
     metadata[:steering_eps] = steering_eps
     metadata[:radius_scale_factor] = radius_scale_factor
-    metadata[:d] = d
-    metadata[:gamma] = gamma
     metadata[:r] = r
     metadata[:goal_bias] = goal_bias
 

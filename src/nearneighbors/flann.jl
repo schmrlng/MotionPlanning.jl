@@ -1,4 +1,4 @@
-export FLANNNNDS
+export FLANNNNDS, use_FLANNNNDS, use_FLANN
 const FLANNIndex = FLANN.FLANNIndex
 
 mutable struct FLANNNNDS{T} <: MetricNNDS
@@ -7,7 +7,7 @@ mutable struct FLANNNNDS{T} <: MetricNNDS
     inds::Vector{Cint}
     dists::Vector{T}
 end
-function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neighbor_count=10000) where {S}
+function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neighbor_count=10000, kwargs...) where {S}
     T = eltype(S)
     # FLANN_INDEX_KDTREE_SINGLE addpoints! is inefficient
     # FLANN_INDEX_KDTREE is inaccurate (though it seems FLANN_INDEX_KMEANS is too?)
@@ -20,7 +20,9 @@ function FLANNNNDS(nodes::ExplicitSampleSet{S}, bvp::GeometricSteering; max_neig
     nnds
 end
 
-default_NN_data_structure(nodes::ExplicitSampleSet, bvp::GeometricSteering) = FLANNNNDS(nodes, bvp)
+use_FLANNNNDS() = (default_NN_data_structure_type[] = :FLANNNNDS)
+use_FLANN() = use_FLANNNNDS()
+use_FLANN()    # set to default upon `import FLANN`
 
 # addstates!(nnds::FLANNNNDS, x::State) = FLANN.addpoints!(nnds.index, collect_if_not_Array(x))    # does ref persist?
 # addstates!(nnds::FLANNNNDS, xs::AbstractVector{<:State}) = FLANN.addpoints!(nnds.index, vecs2mat(xs))

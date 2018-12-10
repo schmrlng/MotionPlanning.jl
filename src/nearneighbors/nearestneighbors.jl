@@ -1,13 +1,16 @@
-export NNTreeNNDS
+export NNTreeNNDS, use_NNTreeNNDS, use_NearestNeighbors
 const NNTree = NearestNeighbors.NNTree
 const KDTree = NearestNeighbors.KDTree
+const Euclidean = NearestNeighbors.Euclidean
 
 struct NNTreeNNDS{T<:NNTree} <: MetricNNDS
     tree::T
 end
-NNTreeNNDS(nodes::ExplicitSampleSet, bvp::GeometricSteering) = NNTreeNNDS(KDTree(nodes.V, NearestNeighbors.Euclidean()))
+NNTreeNNDS(nodes::ExplicitSampleSet, bvp::GeometricSteering; kwargs...) = NNTreeNNDS(KDTree(nodes.V, Euclidean()))
 
-default_NN_data_structure(nodes::ExplicitSampleSet, bvp::GeometricSteering) = NNTreeNNDS(nodes, bvp)
+use_NNTreeNNDS() = (default_NN_data_structure_type[] = :NNTreeNNDS)
+use_NearestNeighbors() = use_NNTreeNNDS()
+use_NearestNeighbors()    # set to default upon `import NearestNeighbors`
 
 function neighbors(nnds::NNTreeNNDS, nodes::ExplicitSampleSet, bvp::GeometricSteering, v::Int, r;
                    dir::F_or_B=Val(:F), include_controls::BoolVal=Val(false))

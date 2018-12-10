@@ -69,9 +69,12 @@ end
 
 default_edge_cache(nodes, bvp, include_controls, ::Val{:variable}) = StreamingNC()
 default_edge_cache(nodes, bvp, include_controls, ::Any) = MemoizedNC(nodes, bvp, include_controls=include_controls)
-default_NN_data_structure(nodes, bvp, include_controls) = default_NN_data_structure(nodes, bvp)
-default_NN_data_structure(nodes, bvp) = NullNNDS()
+const default_NN_data_structure_type = Ref(:NullNNDS)    # probably not the most performant way to do this
+function default_NN_data_structure(nodes, bvp, include_controls)
+    getfield(@__MODULE__, default_NN_data_structure_type[])(nodes, bvp, include_controls=include_controls)
+end
 
+Base.length(G::NearNeighborGraph) = length(G.nodes)
 Base.getindex(G::NearNeighborGraph, i) = G.nodes[i]
 Base.getindex(G::NearNeighborGraph, i, j) = SteeringEdge(G.bvp, G[i], G[j])    # TODO: use cached controls if applicable
 
